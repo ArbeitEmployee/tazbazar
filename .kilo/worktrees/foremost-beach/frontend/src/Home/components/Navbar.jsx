@@ -1,0 +1,1030 @@
+/* eslint-disable no-unused-vars */
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useSelector } from "react-redux";
+import { Link, NavLink, useLocation, useNavigate } from "@/lib/routing";
+import axios from "axios";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  FiArrowRight,
+  FiChevronDown,
+  FiGrid,
+  FiHeart,
+  FiHelpCircle,
+  FiLogOut,
+  FiMenu,
+  FiPackage,
+  FiPhoneCall,
+  FiSearch,
+  FiShuffle,
+  FiShoppingBag,
+  FiTag,
+  FiTruck,
+  FiUser,
+  FiX,
+  FiZap,
+} from "react-icons/fi";
+import { toast } from "react-hot-toast";
+import { useCart } from "../../context/CartContext";
+import usePublicSettings from "../../hooks/usePublicSettings";
+import { toPublicAssetUrl } from "../../utils/publicSettings";
+import { fetchPublicCategories } from "../../utils/publicCategories";
+
+const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+const navItems = [
+  { label: "Home", to: "/" },
+  { label: "Shop", to: "/shop" },
+  { label: "About", to: "/about" },
+  { label: "Contact", to: "/contact" },
+  { label: "FAQs", to: "/faqs" },
+  { label: "Track Order", to: "/track-order" },
+];
+const CATEGORY_CACHE_KEY = "publicNavbarCategories";
+const CATEGORY_CACHE_TTL_MS = 5 * 60 * 1000;
+
+const readCachedCategories = () => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(CATEGORY_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    const timestamp = Number(parsed?.timestamp || 0);
+    const items = Array.isArray(parsed?.items) ? parsed.items : [];
+    if (!timestamp || Date.now() - timestamp > CATEGORY_CACHE_TTL_MS) {
+      return [];
+    }
+    return items;
+  } catch {
+    return [];
+  }
+};
+
+const writeCachedCategories = (items = []) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      CATEGORY_CACHE_KEY,
+      JSON.stringify({
+        timestamp: Date.now(),
+        items: Array.isArray(items) ? items : [],
+      }),
+    );
+  } catch {
+    // Ignore cache write failures.
+  }
+};
+
+const normalizeOrderLookup = (value) =>
+  String(value || "")
+    .trim()
+    .replace(/^order\s*#?\s*/i, "")
+    .replace(/^#/, "")
+    .trim();
+
+const Navbar = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { settings } = usePublicSettings();
+  const { cartCount } = useCart();
+  const compareCount = useSelector((state) => state.compare.items?.length || 0);
+  const wishlistCount = useSelector(
+    (state) => state.wishlist.items?.length || 0,
+  );
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileMenuTab, setMobileMenuTab] = useState("menu");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const menuButtonRef = useRef(null);
+  const userMenuRef = useRef(null);
+  const searchRef = useRef(null);
+  const categoryMenuRef = useRef(null);
+  const timeoutRef = useRef(null);
+
+  const website = settings?.website || {};
+  const contact = settings?.contact || {};
+  const storeName = String(website?.storeName || "").trim();
+  const brandName = storeName || "E-Commerce";
+  const logoMode = String(website?.logoMode || "").trim().toLowerCase() === "text" ? "text" : "image";
+  const logo = logoMode === "image" ? toPublicAssetUrl(website?.logoUrl || "") : "";
+  const logoText = String(website?.logoText || "").trim();
+  const brandLogoText = logoText || brandName;
+  const hotline = String(contact?.phone1 || "+880 1700-000000").trim();
+
+  const safeCompareCount = Number.isFinite(compareCount)
+    ? compareCount
+    : Number.parseInt(compareCount, 10) || 0;
+  const safeCartCount = Number.isFinite(cartCount)
+    ? cartCount
+    : Number.parseInt(cartCount, 10) || 0;
+  const safeWishlistCount = Number.isFinite(wishlistCount)
+    ? wishlistCount
+    : Number.parseInt(wishlistCount, 10) || 0;
+
+  const visibleCategories = useMemo(
+    () =>
+      categories.filter(
+        (category) => (category?.type || "").toLowerCase() !== "package",
+      ),
+    [categories],
+  );
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 20);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const syncUser = () => {
+      const token = localStorage.getItem("token");
+      const userData = localStorage.getItem("user");
+      setLoggedIn(Boolean(token));
+      if (!userData) {
+        setUserName("");
+        return;
+      }
+      try {
+        const user = JSON.parse(userData);
+        setUserName(user.name || user.email?.split("@")[0] || "User");
+      } catch (_error) {
+        setUserName("User");
+      }
+    };
+
+    syncUser();
+    window.addEventListener("userLoggedIn", syncUser);
+    window.addEventListener("userLoggedOut", syncUser);
+    return () => {
+      window.removeEventListener("userLoggedIn", syncUser);
+      window.removeEventListener("userLoggedOut", syncUser);
+    };
+  }, []);
+
+  useEffect(() => {
+    const cachedCategories = readCachedCategories();
+    if (cachedCategories.length > 0) {
+      setCategories(cachedCategories);
+      setLoading(false);
+    }
+
+    let active = true;
+
+    const loadCategories = async () => {
+      if (cachedCategories.length === 0 && active) {
+        setLoading(true);
+      }
+      try {
+        const nextCategories = await fetchPublicCategories();
+        if (!active) return;
+        setCategories(nextCategories);
+        writeCachedCategories(nextCategories);
+      } catch (_error) {
+        if (!active && cachedCategories.length > 0) return;
+        if (active && cachedCategories.length === 0) {
+          setCategories([]);
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+    loadCategories();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    setMobileSearchOpen(false);
+    setShowSuggestions(false);
+    setUserMenuOpen(false);
+    setCategoryOpen(false);
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setUserMenuOpen(false);
+      }
+      if (categoryMenuRef.current && !categoryMenuRef.current.contains(event.target)) {
+        setCategoryOpen(false);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [mobileMenuOpen]);
+
+  const scrollToTop = () => {
+    if (typeof window !== "undefined") {
+      window.scrollTo(0, 0);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
+
+  const loadSuggestions = async (value) => {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) {
+      setSuggestions([]);
+      return;
+    }
+    try {
+      const normalizedOrderQuery = normalizeOrderLookup(trimmed);
+      const [productResponse, orderResponse] = await Promise.allSettled([
+        axios.get(`${baseUrl}/products/public/suggestions`, {
+          params: { query: trimmed, limit: 8 },
+        }),
+        normalizedOrderQuery.length >= 3
+          ? axios.get(`${baseUrl}/orders/search`, {
+              params: { query: normalizedOrderQuery },
+            })
+          : Promise.resolve({ data: { suggestions: [] } }),
+      ]);
+
+      const productPayload =
+        productResponse.status === "fulfilled"
+          ? productResponse.value.data
+          : {};
+      const orderPayload =
+        orderResponse.status === "fulfilled" ? orderResponse.value.data : {};
+
+      const products = Array.isArray(productPayload?.suggestions?.products)
+        ? productPayload.suggestions.products.map((item) => ({
+            ...item,
+            resultType: "product",
+          }))
+        : [];
+      const nextCategories = Array.isArray(
+        productPayload?.suggestions?.categories,
+      )
+        ? productPayload.suggestions.categories.map((item) => ({
+            ...item,
+            resultType: "category",
+          }))
+        : [];
+      const orders = Array.isArray(orderPayload?.suggestions)
+        ? orderPayload.suggestions.map((item) => ({
+            ...item,
+            resultType: "order",
+          }))
+        : [];
+      const prioritizeOrders = /^ord-/i.test(normalizedOrderQuery);
+      setSuggestions(
+        prioritizeOrders
+          ? [...orders, ...products, ...nextCategories]
+          : [...products, ...nextCategories, ...orders],
+      );
+    } catch (_error) {
+      setSuggestions([]);
+    }
+  };
+
+  const handleSearchChange = (event) => {
+    const value = event.target.value;
+    setQuery(value);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (!value.trim()) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    setShowSuggestions(true);
+    timeoutRef.current = setTimeout(() => loadSuggestions(value), 180);
+  };
+
+  const handleSearchSubmit = async (event) => {
+    event.preventDefault();
+    const trimmed = query.trim();
+    if (!trimmed) return;
+
+    let navigatedToOrder = false;
+    const normalizedOrderQuery = normalizeOrderLookup(trimmed);
+
+    if (normalizedOrderQuery.length >= 3) {
+      try {
+        const response = await axios.get(`${baseUrl}/orders/search`, {
+          params: { query: normalizedOrderQuery },
+        });
+        const orderSuggestions = Array.isArray(response.data?.suggestions)
+          ? response.data.suggestions
+          : [];
+        const exactOrderMatch = orderSuggestions.find(
+          (item) =>
+            String(item?.orderNumber || "")
+              .trim()
+              .toLowerCase() === normalizedOrderQuery.toLowerCase(),
+        );
+        if (exactOrderMatch?.orderNumber) {
+          navigate(
+            `/track-order/${encodeURIComponent(exactOrderMatch.orderNumber)}`,
+          );
+          navigatedToOrder = true;
+        }
+      } catch (_error) {
+        navigatedToOrder = false;
+      }
+    }
+
+    if (!navigatedToOrder) {
+      navigate(`/shop?search=${encodeURIComponent(trimmed)}`);
+    }
+    setQuery("");
+    setShowSuggestions(false);
+    setMobileSearchOpen(false);
+    setMobileMenuOpen(false);
+    scrollToTop();
+  };
+
+  const handleSuggestionClick = (item) => {
+    navigate(
+      item.resultType === "product"
+        ? `/product/${item._id}`
+        : item.resultType === "order"
+          ? `/track-order/${encodeURIComponent(item.orderNumber)}`
+          : `/shop?category=${item._id}`,
+    );
+    setQuery("");
+    setShowSuggestions(false);
+    setMobileSearchOpen(false);
+    setMobileMenuOpen(false);
+    scrollToTop();
+  };
+
+  const handleCategoryClick = (id) => {
+    navigate(`/shop?category=${id}`);
+    setCategoryOpen(false);
+    setMobileMenuOpen(false);
+    scrollToTop();
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    toast.success("Logged out successfully");
+    window.dispatchEvent(new CustomEvent("userLoggedOut"));
+    navigate("/");
+    setMobileMenuOpen(false);
+    setUserMenuOpen(false);
+    scrollToTop();
+  };
+
+  const renderSearchBox = ({ mobile = false, className = "" } = {}) => (
+    <div
+      ref={searchRef}
+      className={
+        mobile
+          ? `relative ${className}`.trim()
+          : `relative min-w-0 ${className}`.trim()
+      }
+    >
+      <form onSubmit={handleSearchSubmit} className="relative flex items-center">
+        <div className="relative flex-1">
+          <FiSearch className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={query}
+            onChange={handleSearchChange}
+            onFocus={() => query.trim() && setShowSuggestions(true)}
+            placeholder="Search for products, categories, or order ID..."
+            autoComplete="off"
+            className="h-11 w-full rounded-full border border-slate-200 bg-slate-50/80 pl-11 pr-24 text-sm text-slate-900 transition-all placeholder:text-slate-400 focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/10 sm:h-12"
+          />
+        </div>
+        <button
+          type="submit"
+          aria-label="Search"
+          className="absolute right-1.5 top-1/2 inline-flex h-8 -translate-y-1/2 items-center gap-1.5 rounded-full bg-blue-600 px-4 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700 sm:h-9"
+        >
+          <FiSearch className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Search</span>
+        </button>
+      </form>
+
+      {showSuggestions && query.trim() ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-[11030] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+          {suggestions.length > 0 ? (
+            <div className="max-h-96 overflow-y-auto p-2">
+              {suggestions.map((item) => (
+                <button
+                  key={`${item.resultType}-${item._id || item.orderNumber}`}
+                  type="button"
+                  onClick={() => handleSuggestionClick(item)}
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-left transition hover:bg-slate-50"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    {item.resultType === "product" ? (
+                      <FiShoppingBag className="h-4 w-4" />
+                    ) : item.resultType === "order" ? (
+                      <FiPackage className="h-4 w-4" />
+                    ) : (
+                      <FiGrid className="h-4 w-4" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {item.resultType === "product"
+                        ? item.title
+                        : item.resultType === "order"
+                          ? item.orderNumber
+                          : item.name}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-slate-500">
+                      {item.resultType === "product"
+                        ? item.brand || "Product"
+                        : item.resultType === "order"
+                          ? `${item.status || "Order"}${item.productName ? ` - ${item.productName}` : ""}`
+                          : item.type || "Category"}
+                    </p>
+                  </div>
+                  <FiArrowRight className="h-4 w-4 text-slate-400" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="px-5 py-8 text-center text-sm text-slate-500">
+              No results found
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <header
+      className={`app-layer-header sticky top-0 z-[127000] bg-white transition-shadow duration-300 ${
+        scrolled ? "shadow-md" : "shadow-xs"
+      }`}
+    >
+
+      {/* 2. MAIN HEADER BAR */}
+      <div className="border-b border-slate-100 bg-white">
+        <div className="site-shell">
+          {/* Mobile View Header */}
+          <div className="grid grid-cols-[38px_minmax(0,1fr)_auto] items-center gap-2 py-3 lg:hidden">
+            <button
+              ref={menuButtonRef}
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen((prev) => !prev);
+                setMobileSearchOpen(false);
+              }}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition active:scale-95"
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? (
+                <FiX className="h-5 w-5" />
+              ) : (
+                <FiMenu className="h-5 w-5" />
+              )}
+            </button>
+            <Link
+              to="/"
+              onClick={scrollToTop}
+              className="flex min-w-0 items-center overflow-hidden px-1"
+            >
+              {logo ? (
+                <img
+                  src={logo}
+                  alt={brandName}
+                  className="h-10 sm:h-11 w-auto max-w-[170px] sm:max-w-[200px] object-contain"
+                />
+              ) : (
+                <p className="truncate text-xl sm:text-2xl font-black tracking-tight text-slate-900">
+                  {brandLogoText}
+                </p>
+              )}
+            </Link>
+            <div className="flex items-center justify-end gap-1 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileSearchOpen((prev) => !prev);
+                  setMobileMenuOpen(false);
+                }}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700"
+                aria-label="Toggle search"
+              >
+                {mobileSearchOpen ? (
+                  <FiX className="h-5 w-5" />
+                ) : (
+                  <FiSearch className="h-5 w-5" />
+                )}
+              </button>
+
+              <Link
+                to="/compare"
+                onClick={scrollToTop}
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700"
+                aria-label="Open compare"
+              >
+                <FiShuffle className="h-5 w-5" />
+                {safeCompareCount > 0 ? (
+                  <span className="pointer-events-none absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white shadow-xs">
+                    {safeCompareCount > 99 ? "99+" : safeCompareCount}
+                  </span>
+                ) : null}
+              </Link>
+
+              <Link
+                to="/wishlist"
+                onClick={scrollToTop}
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700"
+                aria-label="Open wishlist"
+              >
+                <FiHeart className="h-5 w-5" />
+                {safeWishlistCount > 0 ? (
+                  <span className="pointer-events-none absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-xs">
+                    {safeWishlistCount > 99 ? "99+" : safeWishlistCount}
+                  </span>
+                ) : null}
+              </Link>
+
+              <Link
+                to="/cart"
+                onClick={scrollToTop}
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:border-blue-600 hover:text-blue-600"
+                aria-label="Open cart"
+              >
+                <FiShoppingBag className="h-5 w-5" />
+                {safeCartCount > 0 ? (
+                  <span className="pointer-events-none absolute -right-1.5 -top-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white shadow-xs">
+                    {safeCartCount > 99 ? "99+" : safeCartCount}
+                  </span>
+                ) : null}
+              </Link>
+            </div>
+          </div>
+
+          {/* Desktop View Main Header */}
+          <div className="hidden items-center justify-between gap-8 py-4 lg:flex">
+            {/* Logo */}
+            <Link
+              to="/"
+              onClick={scrollToTop}
+              className="flex flex-none items-center"
+            >
+              {logo ? (
+                <img
+                  src={logo}
+                  alt={brandName}
+                  className="h-12 md:h-14 lg:h-16 w-auto max-w-[220px] lg:max-w-[280px] object-contain transition-transform duration-200 hover:scale-102"
+                />
+              ) : (
+                <p className="text-2xl md:text-3xl font-black tracking-tight text-slate-900">
+                  {brandLogoText}
+                </p>
+              )}
+            </Link>
+
+            {/* Centered Search Bar */}
+            <div className="flex-1 max-w-2xl">
+              {renderSearchBox()}
+            </div>
+
+            {/* Actions Cluster */}
+            <div className="flex items-center gap-2.5">
+              {/* Compare Link */}
+              <Link
+                to="/compare"
+                onClick={scrollToTop}
+                className="group relative flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-slate-700 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-600 hover:bg-blue-50/40 hover:text-blue-600 hover:shadow-xs"
+              >
+                <div className="relative flex items-center justify-center">
+                  <FiShuffle className="h-4.5 w-4.5 transition-transform duration-200 group-hover:scale-110" />
+                  {safeCompareCount > 0 ? (
+                    <span className="absolute -right-2.5 -top-2.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-black text-white shadow-2xs">
+                      {safeCompareCount > 99 ? "99+" : safeCompareCount}
+                    </span>
+                  ) : null}
+                </div>
+                <span className="hidden text-xs font-bold xl:inline">Compare</span>
+              </Link>
+
+              {/* Wishlist Link */}
+              <Link
+                to="/wishlist"
+                onClick={scrollToTop}
+                className="group relative flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-slate-700 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:border-rose-500 hover:bg-rose-50/40 hover:text-rose-500 hover:shadow-xs"
+              >
+                <div className="relative flex items-center justify-center">
+                  <FiHeart className="h-4.5 w-4.5 transition-transform duration-200 group-hover:scale-110" />
+                  {safeWishlistCount > 0 ? (
+                    <span className="absolute -right-2.5 -top-2.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-black text-white shadow-2xs">
+                      {safeWishlistCount > 99 ? "99+" : safeWishlistCount}
+                    </span>
+                  ) : null}
+                </div>
+                <span className="hidden text-xs font-bold xl:inline">Wishlist</span>
+              </Link>
+
+              {/* Cart Button (Styled matching Wishlist/Compare) */}
+              <Link
+                to="/cart"
+                onClick={scrollToTop}
+                className="group relative flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-slate-700 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-600 hover:bg-blue-50/40 hover:text-blue-600 hover:shadow-xs"
+              >
+                <div className="relative flex items-center justify-center">
+                  <FiShoppingBag className="h-4.5 w-4.5 transition-transform duration-200 group-hover:scale-110" />
+                  {safeCartCount > 0 ? (
+                    <span className="absolute -right-2.5 -top-2.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-blue-600 px-1 text-[9px] font-black text-white shadow-2xs">
+                      {safeCartCount > 99 ? "99+" : safeCartCount}
+                    </span>
+                  ) : null}
+                </div>
+                <span className="hidden text-xs font-bold xl:inline">Cart</span>
+              </Link>
+
+              {/* User Menu / Login */}
+              {loggedIn ? (
+                <div ref={userMenuRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setUserMenuOpen((prev) => !prev)}
+                    className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300"
+                    aria-haspopup="menu"
+                    aria-expanded={userMenuOpen}
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-xs font-extrabold text-white">
+                      {(userName || "U").charAt(0).toUpperCase()}
+                    </span>
+                    <span className="hidden max-w-[90px] truncate text-xs font-bold lg:inline">
+                      {userName || "Account"}
+                    </span>
+                    <FiChevronDown
+                      className={`h-3.5 w-3.5 text-slate-400 transition-transform ${
+                        userMenuOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  <AnimatePresence>
+                    {userMenuOpen ? (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                        transition={{ duration: 0.15 }}
+                        role="menu"
+                        className="absolute right-0 top-[calc(100%+0.5rem)] z-[11020] w-52 overflow-hidden rounded-2xl border border-slate-200 bg-white py-1.5 shadow-2xl"
+                      >
+                        <div className="border-b border-slate-100 px-4 py-2.5">
+                          <p className="text-xs font-medium text-slate-500">Signed in as</p>
+                          <p className="truncate text-sm font-bold text-slate-900">{userName || "User"}</p>
+                        </div>
+                        <Link
+                          to="/dashboard"
+                          onClick={() => {
+                            setUserMenuOpen(false);
+                            scrollToTop();
+                          }}
+                          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:text-blue-600"
+                          role="menuitem"
+                        >
+                          <FiGrid className="h-4 w-4 text-slate-400" />
+                          Dashboard
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={handleLogout}
+                          className="flex w-full items-center gap-2.5 border-t border-slate-100 px-4 py-2.5 text-left text-sm font-medium text-rose-600 transition hover:bg-rose-50"
+                          role="menuitem"
+                        >
+                          <FiLogOut className="h-4 w-4" />
+                          Logout
+                        </button>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                </div>
+              ) : (
+                <Link
+                  to="/login"
+                  onClick={scrollToTop}
+                  className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:border-blue-600 hover:bg-blue-50 hover:text-blue-600"
+                >
+                  <FiUser className="h-4 w-4 text-blue-600" />
+                  <span>Login / Register</span>
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile Search Box Popup */}
+      <AnimatePresence>
+        {mobileSearchOpen ? (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="border-b border-slate-200 bg-slate-50 px-4 pb-4 pt-3 lg:hidden"
+          >
+            {renderSearchBox({ mobile: true })}
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      {/* 3. LOWER NAVIGATION BAR */}
+      <div className="hidden border-b border-slate-100 bg-white lg:block">
+        <div className="site-shell flex items-center justify-between gap-6 py-2.5">
+          {/* All Categories Dropdown Button */}
+          <div ref={categoryMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setCategoryOpen((prev) => !prev)}
+              className="flex h-11 items-center gap-2.5 rounded-xl bg-slate-900 px-5 text-xs font-extrabold uppercase tracking-wider text-white transition hover:bg-blue-600 active:scale-98"
+            >
+              <FiGrid className="h-4 w-4 text-blue-400" />
+              <span>All Categories</span>
+              <FiChevronDown
+                className={`h-4 w-4 transition-transform duration-200 ${
+                  categoryOpen ? "rotate-180 text-blue-300" : "text-slate-400"
+                }`}
+              />
+            </button>
+
+            {/* Mega Category Dropdown Menu */}
+            <AnimatePresence>
+              {categoryOpen ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  transition={{ duration: 0.18 }}
+                  className="absolute left-0 top-[calc(100%+0.5rem)] z-[11010] w-[640px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+                >
+                  <div className="grid grid-cols-[200px_minmax(0,1fr)]">
+                    <div className="bg-slate-50 p-6 border-r border-slate-100 flex flex-col justify-between">
+                      <div>
+                        <span className="inline-block rounded-md bg-blue-100 px-2 py-0.5 text-[10px] font-extrabold uppercase text-blue-700 tracking-wider">
+                          Departments
+                        </span>
+                        <h4 className="mt-2 text-lg font-black text-slate-900">
+                          Shop by Category
+                        </h4>
+                        <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+                          Explore our full collection of curated items.
+                        </p>
+                      </div>
+                      <Link
+                        to="/shop"
+                        onClick={scrollToTop}
+                        className="mt-6 inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 transition hover:text-blue-700"
+                      >
+                        <span>View all categories</span>
+                        <FiArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </div>
+
+                    <div className="max-h-[380px] overflow-y-auto p-4">
+                      {loading ? (
+                        <div className="py-8 text-center text-xs text-slate-400">
+                          Loading categories...
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          {visibleCategories.slice(0, 16).map((category) => (
+                            <button
+                              key={category._id}
+                              type="button"
+                              onClick={() => handleCategoryClick(category._id)}
+                              className="group flex items-center justify-between rounded-xl border border-slate-100 p-2.5 text-left text-xs font-semibold text-slate-700 transition hover:border-blue-200 hover:bg-blue-50/50 hover:text-blue-600"
+                            >
+                              <span className="truncate">{category.name}</span>
+                              <FiArrowRight className="h-3 w-3 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </div>
+
+          {/* Primary Nav Links */}
+          <nav className="flex items-center gap-1">
+            {navItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === "/"}
+                onClick={scrollToTop}
+                className={({ isActive }) =>
+                  `rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                    isActive
+                      ? "bg-blue-50 text-blue-600 font-extrabold"
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  }`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+
+          {/* Hot Deals Highlight Badge */}
+          <div className="flex items-center">
+            <Link
+              to="/shop?filter=deals"
+              onClick={scrollToTop}
+              className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3.5 py-1.5 text-xs font-extrabold text-rose-600 transition hover:bg-rose-100"
+            >
+              <FiZap className="h-3.5 w-3.5 fill-rose-500 text-rose-500" />
+              <span>Special Offers</span>
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. MOBILE DRAWER MENU */}
+      <AnimatePresence>
+        {mobileMenuOpen ? (
+          <>
+            <motion.button
+              type="button"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileMenuOpen(false)}
+              className="app-layer-drawer-overlay fixed inset-0 z-[127900] bg-slate-950/40 backdrop-blur-xs"
+              aria-label="Close menu overlay"
+            />
+            <motion.div
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "tween", duration: 0.22 }}
+              className="app-layer-drawer fixed inset-y-0 left-0 z-[128000] w-[85vw] max-w-sm bg-white shadow-2xl"
+            >
+              <div className="flex h-full flex-col">
+                <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+                  <Link
+                    to="/"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex min-w-0 items-center overflow-hidden"
+                  >
+                    {logo ? (
+                      <img
+                        src={logo}
+                        alt={brandName}
+                        className="h-10 w-auto max-w-[170px] object-contain"
+                      />
+                    ) : (
+                      <p className="truncate text-xl font-black tracking-tight text-slate-900">
+                        {brandLogoText}
+                      </p>
+                    )}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700"
+                  >
+                    <FiX className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 border-b border-slate-100 bg-slate-50 p-2">
+                  <button
+                    type="button"
+                    onClick={() => setMobileMenuTab("menu")}
+                    className={`h-10 rounded-xl text-xs font-bold tracking-wide transition ${
+                      mobileMenuTab === "menu"
+                        ? "bg-white text-blue-600 shadow-xs ring-1 ring-slate-200/80"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    Menu
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileMenuTab("categories")}
+                    className={`h-10 rounded-xl text-xs font-bold tracking-wide transition ${
+                      mobileMenuTab === "categories"
+                        ? "bg-white text-blue-600 shadow-xs ring-1 ring-slate-200/80"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    Categories
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4">
+                  {mobileMenuTab === "categories" ? (
+                    <div className="space-y-2">
+                      <div className="mb-2 flex items-center justify-between px-1">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          Categories
+                        </span>
+                        <Link
+                          to="/shop"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="text-xs font-bold text-blue-600 underline"
+                        >
+                          View all
+                        </Link>
+                      </div>
+                      {visibleCategories.map((category) => (
+                        <button
+                          key={category._id}
+                          type="button"
+                          onClick={() => handleCategoryClick(category._id)}
+                          className="flex w-full items-center justify-between rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3 text-left text-xs font-bold text-slate-700 transition hover:bg-blue-50 hover:text-blue-600"
+                        >
+                          <span className="truncate">{category.name}</span>
+                          <FiArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {navItems.map((item) => (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="flex items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-3 text-xs font-bold text-slate-700 shadow-xs transition hover:bg-slate-50 hover:text-blue-600"
+                        >
+                          <span>{item.label}</span>
+                          <FiArrowRight className="h-3.5 w-3.5 text-slate-400" />
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-slate-100 p-4">
+                  {loggedIn ? (
+                    <div className="space-y-2">
+                      <Link
+                        to="/dashboard"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 text-xs font-bold text-white shadow-sm"
+                      >
+                        <FiGrid className="h-4 w-4" />
+                        Go to Dashboard
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 text-xs font-bold text-rose-600"
+                      >
+                        <FiLogOut className="h-4 w-4" />
+                        Logout
+                      </button>
+                    </div>
+                  ) : (
+                    <Link
+                      to="/login"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-blue-600 text-xs font-bold text-white shadow-sm transition hover:bg-blue-700"
+                    >
+                      <FiUser className="h-4 w-4" />
+                      Login or Register
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        ) : null}
+      </AnimatePresence>
+    </header>
+  );
+};
+
+export default Navbar;
+

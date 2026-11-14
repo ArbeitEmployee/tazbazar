@@ -1,0 +1,35 @@
+{
+  "name": "ecommerce-single-backend",
+  "version": "1.0.0",
+  "description": "ecommerce-single-backend",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "seed:admin": "node scripts/seed-admin.js",
+    "seed:fashion": "node scripts/seed-pure-fashion.js",
+    "test": "node scripts/ci-smoke.js"
+  },
+  "dependencies": {
+    "axios": "1.15.0",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.8.0",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "dns": "^0.2.2",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "helmet": "^7.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^7.8.7",
+    "morgan": "^1.10.1",
+    "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
+    "nodemailer": "8.0.5",
+    "validator": "^13.9.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

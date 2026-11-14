@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 40" width="56" height="40">
+  <rect width="56" height="40" rx="8" fill="#0B238E"/>
+  <!-- SSLCommerz padlock / secure shield emblem only -->
+  <g transform="translate(14, 6)">
+    <!-- Outer Shield / lock -->
+    <path d="M14 2 L26 6 L26 18 C26 24 14 28 14 28 C14 28 2 24 2 18 L2 6 Z" fill="#00D2FF"/>
+    <!-- Inner keyhole / checkmark -->
+    <path d="M9 14 L12.5 18 L19 10" stroke="#0B238E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>

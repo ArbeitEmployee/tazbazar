@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 40" width="56" height="40">
+  <rect width="56" height="40" rx="8" fill="#FFC800"/>
+  <!-- Upay U-emblem symbol only -->
+  <g transform="translate(14, 6)">
+    <circle cx="14" cy="14" r="14" fill="#004B8D"/>
+    <!-- U arc -->
+    <path d="M7 10 C7 19 21 19 21 10" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+    <circle cx="18" cy="8" r="2" fill="#FFC800"/>
+  </g>
+</svg>
