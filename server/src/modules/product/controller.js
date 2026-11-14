@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 const Product = require("../../models/Product");
 const service = require("./services/productCore.service.js");
 
-const { searchProducts, createProduct, getProducts, getActiveProducts, getProductsByType, getHomeCatalog, getProduct, updateProduct, deleteProduct, toggleProductActive, duplicateProduct, updateProductApprovalStatus, getSearchSuggestions } = service;
+const { searchProducts, createProduct, getProducts, getActiveProducts, getProductsByType, getHomeCatalog, getProduct, getRelatedProducts, updateProduct, deleteProduct, toggleProductActive, duplicateProduct, updateProductApprovalStatus, getSearchSuggestions } = service;
 
 // Public view tracking for Product View Report
 const trackProductView = async (req, res) => {
@@ -35,5 +35,5 @@ const trackProductView = async (req, res) => {
   }
 };
 
-module.exports = { searchProducts, createProduct, getProducts, getActiveProducts, getProductsByType, getHomeCatalog, getProduct, updateProduct, deleteProduct, toggleProductActive, duplicateProduct, updateProductApprovalStatus, getSearchSuggestions, trackProductView };
+module.exports = { searchProducts, createProduct, getProducts, getActiveProducts, getProductsByType, getHomeCatalog, getProduct, getRelatedProducts, updateProduct, deleteProduct, toggleProductActive, duplicateProduct, updateProductApprovalStatus, getSearchSuggestions, trackProductView };
 

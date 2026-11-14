@@ -67,6 +67,9 @@ const isVendorUser = () => false;
 const PUBLIC_VENDOR_POPULATE_FIELDS =
   "storeName slug logo status storePrivacy vacationMode city country ratingAverage ratingCount openingHours";
 
+const escapeRegexForQuery = (value) =>
+  String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const isPublicVendorVisible = (vendor) => {
   if (!vendor) return true;
   return (
@@ -1189,11 +1192,47 @@ const getProducts = async (req, res) => {
 
 const getActiveProducts = async (req, res) => {
   try {
-    const products = await Product.find({
+    const query = {
       isActive: true,
       publicationStatus: "published",
       approvalStatus: { $in: ["approved", null] },
-    })
+    };
+
+    // Optional filters. All of them are additive: a request without query
+    // params returns exactly the same payload as before.
+    const categoryParam = String(req.query?.category || "").trim();
+    if (categoryParam) {
+      if (isObjectIdLike(categoryParam)) {
+        query.category = categoryParam;
+      } else {
+        const matchedCategories = await Category.find({
+          name: new RegExp(`^\\s*${escapeRegexForQuery(categoryParam)}\\s*$`, "i"),
+        })
+          .select("_id")
+          .lean();
+        query.category = { $in: matchedCategories.map((row) => row._id) };
+      }
+    }
+
+    const brandParam = String(req.query?.brand || "").trim();
+    if (brandParam) {
+      query.brand = new RegExp(
+        `^\\s*${escapeRegexForQuery(brandParam)}\\s*$`,
+        "i",
+      );
+    }
+
+    const searchParam = String(req.query?.search || "").trim();
+    if (searchParam) {
+      const searchRegex = new RegExp(escapeRegexForQuery(searchParam), "i");
+      query.$or = [
+        { title: searchRegex },
+        { brand: searchRegex },
+        { description: searchRegex },
+      ];
+    }
+
+    const products = await Product.find(query)
       .populate("category", "name")
       .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
       .select(
@@ -1205,13 +1244,43 @@ const getActiveProducts = async (req, res) => {
     await attachImageDataToProducts(products);
     const visibleProducts = filterPublicProductsByVendor(products);
 
-    res.json({
+    const requestedPage = Number.parseInt(req.query?.page, 10);
+    const requestedLimit = Number.parseInt(req.query?.limit, 10);
+    const wantsPagination =
+      Number.isFinite(requestedPage) || Number.isFinite(requestedLimit);
+
+    // Backward compatible: no page/limit -> the full list, as before.
+    if (!wantsPagination) {
+      return res.json({
+        success: true,
+        count: visibleProducts.length,
+        products: visibleProducts,
+      });
+    }
+
+    const limit = Math.min(
+      Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 12, 1),
+      100,
+    );
+    const total = visibleProducts.length;
+    const totalPages = Math.max(Math.ceil(total / limit), 1);
+    const page = Math.min(
+      Math.max(Number.isFinite(requestedPage) ? requestedPage : 1, 1),
+      totalPages,
+    );
+    const start = (page - 1) * limit;
+
+    return res.json({
       success: true,
-      count: visibleProducts.length,
-      products: visibleProducts,
+      count: total,
+      page,
+      limit,
+      totalPages,
+      paginated: true,
+      products: visibleProducts.slice(start, start + limit),
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Server error",
       error: error.message,
@@ -2235,4 +2304,102 @@ const getSearchSuggestions = async (req, res) => {
 };
 
 
-module.exports = { searchProducts, createProduct, getProducts, getActiveProducts, getProductsByType, getHomeCatalog, getProduct, updateProduct, deleteProduct, toggleProductActive, duplicateProduct, updateProductApprovalStatus, getSearchSuggestions };
+const RELATED_PRODUCTS_SELECT =
+  "title price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount";
+const RELATED_PRODUCTS_SCAN_LIMIT = 60;
+
+// GET /api/products/public/:id/related?limit=8
+// Replaces the storefront's previous "download the whole catalog and filter in
+// the browser" approach. One query, ranked on the server, small payload.
+const getRelatedProducts = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!isObjectIdLike(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid product ID format",
+      });
+    }
+
+    const requestedLimit = Number.parseInt(req.query?.limit, 10);
+    const limit = Math.min(
+      Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 8, 1),
+      24,
+    );
+
+    const current = await Product.findById(id)
+      .select("_id category productType")
+      .lean();
+
+    if (!current) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    const candidates = await Product.find({
+      _id: { $ne: current._id },
+      isActive: true,
+      publicationStatus: "published",
+      approvalStatus: { $in: ["approved", null] },
+    })
+      .populate("category", "name")
+      .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
+      .select(RELATED_PRODUCTS_SELECT)
+      .sort({ createdAt: -1 })
+      .limit(RELATED_PRODUCTS_SCAN_LIMIT)
+      .lean();
+
+    await attachImageDataToProducts(candidates);
+    const visibleProducts = filterPublicProductsByVendor(candidates);
+
+    const resolveCategoryId = (value) => {
+      if (!value) return "";
+      if (typeof value === "string") return value;
+      return value?._id ? String(value._id) : "";
+    };
+
+    const categoryId = resolveCategoryId(current.category);
+    const productType = String(current.productType || "").trim();
+
+    const sameCategory = categoryId
+      ? visibleProducts.filter(
+          (entry) => resolveCategoryId(entry.category) === categoryId,
+        )
+      : [];
+    const sameType = productType
+      ? visibleProducts.filter(
+          (entry) => String(entry.productType || "").trim() === productType,
+        )
+      : [];
+
+    // Same preference order the product page used client-side, but the list is
+    // topped up with the next best candidates so the shelf is never nearly
+    // empty when only one other product shares the category.
+    const rankedById = new Map();
+    [...sameCategory, ...sameType, ...visibleProducts].forEach((entry) => {
+      const key = String(entry?._id || "");
+      if (key && !rankedById.has(key)) {
+        rankedById.set(key, entry);
+      }
+    });
+
+    const relatedProducts = Array.from(rankedById.values()).slice(0, limit);
+
+    return res.json({
+      success: true,
+      count: relatedProducts.length,
+      products: relatedProducts,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
+module.exports = { searchProducts, createProduct, getProducts, getActiveProducts, getProductsByType, getHomeCatalog, getProduct, getRelatedProducts, updateProduct, deleteProduct, toggleProductActive, duplicateProduct, updateProductApprovalStatus, getSearchSuggestions };

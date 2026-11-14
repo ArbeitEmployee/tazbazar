@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { configureGlobalToasts } from "@/utils/globalToast";
+import { PUBLIC_SETTINGS_UPDATE_SIGNAL_KEY } from "@/utils/publicSettings";
 import { loadPublicSettings, selectPublicSettings } from "@/store/publicSettingsSlice";
 
 const normalizeHexColor = (value, fallback) => {
@@ -144,11 +145,20 @@ export function AppBootstrap() {
       applyBrandTheme();
       applyFavicon();
     };
+
+    // Only react to the dedicated update signal. Listening to every `storage`
+    // event created a cross-tab feedback loop: fetching settings writes the
+    // cache key, which fires `storage` in the other tabs, which fetch again...
+    const handleStorage = (event) => {
+      if (event?.key && event.key !== PUBLIC_SETTINGS_UPDATE_SIGNAL_KEY) return;
+      refresh();
+    };
+
     window.addEventListener("publicSettingsUpdated", refresh);
-    window.addEventListener("storage", refresh);
+    window.addEventListener("storage", handleStorage);
     return () => {
       window.removeEventListener("publicSettingsUpdated", refresh);
-      window.removeEventListener("storage", refresh);
+      window.removeEventListener("storage", handleStorage);
     };
   }, [dispatch]);
 

@@ -308,6 +308,7 @@ const ProductDetails = () => {
   }, [recentlyViewedItems, product?._id, relatedProducts]);
   const navigate = useNavigate();
   const relatedCarouselRef = useRef(null);
+  const productRef = useRef(null);
   const shareUrl = typeof window !== "undefined" ? window.location.href : "";
   const shareTitle = product?.title || "Product";
   const shareText = product?.description
@@ -521,48 +522,53 @@ const ProductDetails = () => {
     setIsLoggedIn(!!token);
   }, []);
 
-  // Fetch product reviews (deferred so critical product details render first)
+  // Fetch product reviews in parallel with the product details request.
+  // The reviews endpoint does not depend on the product payload, so waiting
+  // for `productLoading` only added latency.
   useEffect(() => {
-    if (!id || productLoading) return;
+    if (!id) return undefined;
 
     let cancelled = false;
-    const timer = setTimeout(() => {
-      const loadReviews = async () => {
-        try {
-          setReviewsLoading(true);
-          const response = await axios.get(
-            `${baseUrl}/products/public/${id}/reviews`,
-          );
-          if (cancelled) return;
-          const nextReviews = Array.isArray(response.data?.reviews)
-            ? response.data.reviews
-            : [];
-          setReviews(nextReviews);
-          setReviewSummary(
-            normalizeReviewSummary(response.data?.summary, nextReviews),
-          );
-        } catch (_error) {
-          if (cancelled) return;
-          setReviews([]);
-          setReviewSummary(
-            normalizeReviewSummary({
-              ratingAverage: Number(product?.ratingAverage || 0),
-              ratingCount: Number(product?.ratingCount || 0),
-            }),
-          );
-        } finally {
-          if (!cancelled) setReviewsLoading(false);
-        }
-      };
 
-      loadReviews();
-    }, 200);
+    const loadReviews = async () => {
+      try {
+        setReviewsLoading(true);
+        const response = await axios.get(
+          `${baseUrl}/products/public/${id}/reviews`,
+        );
+        if (cancelled) return;
+        const nextReviews = Array.isArray(response.data?.reviews)
+          ? response.data.reviews
+          : [];
+        setReviews(nextReviews);
+        setReviewSummary(
+          normalizeReviewSummary(response.data?.summary, nextReviews),
+        );
+      } catch (_error) {
+        if (cancelled) return;
+        const currentProduct = productRef.current;
+        setReviews([]);
+        setReviewSummary(
+          normalizeReviewSummary({
+            ratingAverage: Number(currentProduct?.ratingAverage || 0),
+            ratingCount: Number(currentProduct?.ratingCount || 0),
+          }),
+        );
+      } finally {
+        if (!cancelled) setReviewsLoading(false);
+      }
+    };
+
+    loadReviews();
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
     };
-  }, [id, productLoading, product?.ratingAverage, product?.ratingCount]);
+  }, [id]);
+
+  useEffect(() => {
+    productRef.current = product;
+  }, [product]);
 
   useEffect(() => {
     if (!id || !isLoggedIn) {
@@ -731,10 +737,12 @@ const ProductDetails = () => {
   }, [product?._id]);
 
   useEffect(() => {
-    if (!product?._id) {
+    if (!id) {
       setRelatedProducts([]);
-      return;
+      return undefined;
     }
+
+    let cancelled = false;
 
     const resolveCategoryId = (value) => {
       if (!value) return "";
@@ -742,64 +750,77 @@ const ProductDetails = () => {
       return value?._id ? String(value._id) : "";
     };
 
-    const categoryId = resolveCategoryId(product.category);
-    const productType = String(product.productType || "").trim();
-    let cancelled = false;
-    let timerId = null;
+    const rankRelatedProducts = (entries = []) => {
+      const currentProduct = productRef.current;
+      const currentId = String(currentProduct?._id || id || "");
+      const others = entries.filter(
+        (entry) => String(entry?._id || "") !== currentId,
+      );
+      const categoryId = resolveCategoryId(currentProduct?.category);
+      const productType = String(currentProduct?.productType || "").trim();
+
+      const sameCategory = categoryId
+        ? others.filter(
+            (entry) => resolveCategoryId(entry.category) === categoryId,
+          )
+        : [];
+      const sameType = productType
+        ? others.filter(
+            (entry) => String(entry?.productType || "").trim() === productType,
+          )
+        : [];
+
+      const rankedById = new Map();
+      [...sameCategory, ...sameType, ...others].forEach((entry) => {
+        const key = String(entry?._id || "");
+        if (key && !rankedById.has(key)) rankedById.set(key, entry);
+      });
+      return Array.from(rankedById.values()).slice(0, 8);
+    };
 
     const fetchRelatedProducts = async () => {
       try {
         setRelatedProductsLoading(true);
-        const response = await axios.get(`${baseUrl}/products/public`, {
-          timeout: 15000,
-        });
+        const response = await axios.get(
+          `${baseUrl}/products/public/${encodeURIComponent(id)}/related`,
+          { params: { limit: 8 }, timeout: 15000 },
+        );
+        if (cancelled) return;
         const payload =
           response.data?.products || response.data?.data || response.data;
-        const products = Array.isArray(payload) ? payload : [];
-
-        const otherProducts = products.filter(
-          (entry) => String(entry?._id || "") !== String(product._id || ""),
-        );
-
-        const resolveEntryCategoryId = (value) => {
-          if (!value) return "";
-          if (typeof value === "string") return value;
-          return value?._id ? String(value._id) : "";
-        };
-
-        let resolvedRelated = otherProducts;
-        if (categoryId) {
-          const sameCategory = otherProducts.filter(
-            (entry) => resolveEntryCategoryId(entry.category) === categoryId,
-          );
-          if (sameCategory.length > 0) resolvedRelated = sameCategory;
-        }
-
-        if (!categoryId && productType) {
-          const sameType = otherProducts.filter(
-            (entry) => String(entry?.productType || "").trim() === productType,
-          );
-          if (sameType.length > 0) resolvedRelated = sameType;
-        }
-
-        if (!cancelled) {
-          setRelatedProducts(resolvedRelated.slice(0, 8));
-        }
+        setRelatedProducts(Array.isArray(payload) ? payload : []);
       } catch (_error) {
-        if (!cancelled) setRelatedProducts([]);
+        if (cancelled) return;
+
+        // Graceful fallback for older servers that do not expose the
+        // /related endpoint yet: fetch the catalog and rank client-side,
+        // which is what this page did before.
+        try {
+          const fallback = await axios.get(`${baseUrl}/products/public`, {
+            timeout: 15000,
+          });
+          if (cancelled) return;
+          const payload =
+            fallback.data?.products || fallback.data?.data || fallback.data;
+          setRelatedProducts(
+            rankRelatedProducts(Array.isArray(payload) ? payload : []),
+          );
+        } catch (_fallbackError) {
+          if (!cancelled) setRelatedProducts([]);
+        }
       } finally {
         if (!cancelled) setRelatedProductsLoading(false);
       }
     };
 
-    // Defer related products fetching by 300ms so main product details render immediately
-    timerId = setTimeout(fetchRelatedProducts, 300);
+    // Keyed on the route id, not the product payload: the request can start in
+    // parallel with the product details request instead of after it.
+    fetchRelatedProducts();
 
     return () => {
       cancelled = true;
-      if (timerId) clearTimeout(timerId);
     };
-  }, [product?._id, product?.category, product?.productType]);
+  }, [id]);
 
   useEffect(() => {
     if (!settingsLoaded || !product?._id || typeof window === "undefined") {

@@ -11,6 +11,7 @@ const baseUrl = process.env.NEXT_PUBLIC_API_URL;
 const DEFAULT_MARKETPLACE_MODE = "single";
 const CACHE_KEY = "publicStoreSettings";
 const UPDATE_SIGNAL_KEY = "publicSettingsUpdatedAt";
+export const PUBLIC_SETTINGS_UPDATE_SIGNAL_KEY = UPDATE_SIGNAL_KEY;
 const CACHE_MAX_AGE_MS = 5 * 60 * 1000;
 const DEFAULT_NAV_LINK_PATHS = {
   "daily deals": "/shop?collection=deals",
@@ -443,6 +444,9 @@ const DEFAULT_SETTINGS = {
 
 let inMemorySettings = null;
 let inMemoryTimestamp = 0;
+// Collapses concurrent callers (many components call usePublicSettings on the
+// first paint) into a single network request.
+let inFlightSettingsRequest = null;
 
 const normalizeLogoMode = (value) =>
   String(value || "")
@@ -675,16 +679,29 @@ export const fetchPublicSettings = async ({ force = false } = {}) => {
   }
 
   try {
-    const response = await axios.get(`${baseUrl}/auth/public/settings`, {
-      timeout: 8000,
-    });
+    if (inFlightSettingsRequest) {
+      return await inFlightSettingsRequest;
+    }
 
-    const settings = mergeSettings(response.data?.settings || {});
-    inMemorySettings = settings;
-    inMemoryTimestamp = Date.now();
-    writeCache(settings);
-    return settings;
+    inFlightSettingsRequest = (async () => {
+      const response = await axios.get(`${baseUrl}/auth/public/settings`, {
+        timeout: 8000,
+      });
+
+      const settings = mergeSettings(response.data?.settings || {});
+      inMemorySettings = settings;
+      inMemoryTimestamp = Date.now();
+      writeCache(settings);
+      return settings;
+    })();
+
+    try {
+      return await inFlightSettingsRequest;
+    } finally {
+      inFlightSettingsRequest = null;
+    }
   } catch {
+    inFlightSettingsRequest = null;
     const fallback = mergeSettings();
     inMemorySettings = fallback;
     inMemoryTimestamp = Date.now();
