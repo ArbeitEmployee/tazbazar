@@ -9,6 +9,9 @@
 //   - Custom tracking code snippets (from the SEO & Analytics module)
 // Also publishes window.__MARKETING_STATE__ (consumed by analyticsTracker.js)
 // and flushes any events captured before the scripts finished loading.
+//
+// Initialisation is deferred to an idle slot so the pixels never compete with
+// React hydration on the first paint.
 
 import { useEffect } from "react";
 import usePublicSettings from "@/hooks/usePublicSettings";
@@ -110,7 +113,11 @@ const injectGtmContainers = (gtmIds = []) => {
       const j = d.createElement(s);
       j.async = true;
       j.src = `https://www.googletagmanager.com/gtm.js?id=${i}&l=${l}`;
-      f.parentNode.insertBefore(j, f);
+      if (f && f.parentNode) {
+        f.parentNode.insertBefore(j, f);
+      } else {
+        d.head.appendChild(j);
+      }
     })(window, document, "script", "dataLayer", id);
   });
 };
@@ -157,51 +164,76 @@ const injectTikTokPixel = (tiktokIds = []) => {
   });
 };
 
+const bootstrapMarketing = (settings) => {
+  if (typeof window === "undefined") return;
+
+  const integrations = settings?.integrations || {};
+  const config = resolveTrackingConfiguration(settings, {
+    pathname: window.location.pathname,
+  });
+
+  const pixelIds = uniqueValues([
+    ...config.pixelIds,
+    integrations.facebookPixelId,
+    integrations.metaPixelId,
+  ]);
+  const googleAnalyticsIds = uniqueValues([
+    ...config.googleAnalyticsIds,
+    integrations.googleAnalyticsId,
+  ]);
+  const ga4Ids = uniqueValues([...config.ga4Ids, integrations.ga4MeasurementId]);
+  const gtmIds = uniqueValues([...config.gtmIds, integrations.gtmId]);
+  const tiktokPixelIds = uniqueValues([
+    integrations.tiktokPixelId,
+    settings?.integrations?.tiktokPixelId,
+  ]);
+  const customTrackingCodes = uniqueValues(config.customTrackingCodes);
+
+  window.__MARKETING_STATE__ = {
+    pixelIds,
+    ga4Ids,
+    googleAnalyticsIds,
+    gtmIds,
+    tiktokPixelIds,
+    customTrackingCodes,
+    pathname: window.location.pathname,
+    loadedAt: new Date().toISOString(),
+  };
+
+  injectCustomCodes(customTrackingCodes);
+  injectFacebookPixel(pixelIds);
+  injectGoogleAnalytics(ga4Ids, googleAnalyticsIds);
+  injectGtmContainers(gtmIds);
+  injectTikTokPixel(tiktokPixelIds);
+};
+
 export default function MarketingScripts() {
   const { settings } = usePublicSettings();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const integrations = settings?.integrations || {};
-    const config = resolveTrackingConfiguration(settings, {
-      pathname: window.location.pathname,
-    });
-
-    const pixelIds = uniqueValues([
-      ...config.pixelIds,
-      integrations.facebookPixelId,
-      integrations.metaPixelId,
-    ]);
-    const googleAnalyticsIds = uniqueValues([
-      ...config.googleAnalyticsIds,
-      integrations.googleAnalyticsId,
-    ]);
-    const ga4Ids = uniqueValues([...config.ga4Ids, integrations.ga4MeasurementId]);
-    const gtmIds = uniqueValues([...config.gtmIds, integrations.gtmId]);
-    const tiktokPixelIds = uniqueValues([
-      integrations.tiktokPixelId,
-      settings?.integrations?.tiktokPixelId,
-    ]);
-    const customTrackingCodes = uniqueValues(config.customTrackingCodes);
-
-    window.__MARKETING_STATE__ = {
-      pixelIds,
-      ga4Ids,
-      googleAnalyticsIds,
-      gtmIds,
-      tiktokPixelIds,
-      customTrackingCodes,
-      pathname: window.location.pathname,
-      loadedAt: new Date().toISOString(),
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      bootstrapMarketing(settings);
     };
 
-    injectCustomCodes(customTrackingCodes);
-    injectFacebookPixel(pixelIds);
-    injectGoogleAnalytics(ga4Ids, googleAnalyticsIds);
-    injectGtmContainers(gtmIds);
-    injectTikTokPixel(tiktokPixelIds);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(run, { timeout: 3000 });
+      return () => {
+        cancelled = true;
+        if (typeof window.cancelIdleCallback === "function") {
+          window.cancelIdleCallback(idleId);
+        }
+      };
+    }
+
+    const timeoutId = window.setTimeout(run, 1200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
   }, [settings]);
 
   return null;
