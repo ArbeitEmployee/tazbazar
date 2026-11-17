@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState, useRef, useEffect } from "react";
 import { useNavigate } from "@/lib/routing";
+import { getProductLink } from "../../utils/productUrl";
 import { FiArrowRight, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import { useThemeColors } from "../../hooks/useThemeColors";
 import LandingSectionProductCard from "./LandingSectionProductCard";
@@ -273,7 +274,7 @@ const ProductShowcaseSection = ({
                 key={product?._id || product?.id}
                 product={product}
                 badgeText={badgeText}
-                onViewDetails={(p) => navigate(`/product/${p?._id || p?.id}`)}
+                onViewDetails={(p) => navigate(getProductLink(p))}
               />
             ))}
           </div>

@@ -29,6 +29,7 @@ import {
   normalizeProductVariantDefinitions,
   normalizeSelectedVariantsPayload,
 } from "../../utils/productVariants";
+import { getProductLink } from "../../utils/productUrl";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -286,9 +287,9 @@ const StorefrontProductCard = ({
       onViewDetails(product);
       return;
     }
-    const targetId = productId || product?._id || product?.id;
-    if (targetId) {
-      navigate(`/product/${targetId}`);
+    const targetLink = getProductLink(product || { _id: productId });
+    if (targetLink && targetLink !== "/") {
+      navigate(targetLink);
     }
   };
 
@@ -331,7 +332,7 @@ const StorefrontProductCard = ({
       .toLowerCase();
     if (marketplaceType === "grouped") {
       toast("Choose grouped items on the product details page first.");
-      navigate(`/product/${productId || product?._id || product?.id}`);
+      navigate(getProductLink(product || { _id: productId }));
       return;
     }
 
@@ -411,7 +412,7 @@ const StorefrontProductCard = ({
 
         {/* Product Image Link */}
         <Link
-          to={`/product/${productId || product?._id || product?.id}`}
+          to={getProductLink(product || { _id: productId })}
           onClick={(e) => e.stopPropagation()}
           className="flex h-full w-full items-center justify-center p-0"
         >
@@ -442,7 +443,7 @@ const StorefrontProductCard = ({
 
           {/* Product Title */}
           <Link
-            to={`/product/${productId || product?._id || product?.id}`}
+            to={getProductLink(product || { _id: productId })}
             onClick={(e) => e.stopPropagation()}
             title={String(product?.title || "").trim()}
             className="line-clamp-2 min-h-[2.4rem] block text-xs font-bold leading-snug text-slate-900 transition-colors group-hover:text-blue-600 sm:text-sm"

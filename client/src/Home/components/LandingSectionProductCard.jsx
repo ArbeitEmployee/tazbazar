@@ -30,6 +30,7 @@ import {
   hasVariantOptionPricing,
   normalizeProductVariantDefinitions,
 } from "../../utils/productVariants";
+import { getProductLink } from "../../utils/productUrl";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_URL;
 
@@ -213,7 +214,7 @@ const useProductCardState = (product) => {
     if (!productId) return;
 
     if (!canQuickAddToCart) {
-      navigate(`/product/${productId}`);
+      navigate(getProductLink(product || { _id: productId }));
       return;
     }
 
@@ -295,7 +296,7 @@ const LandingSectionProductCard = ({
     if (typeof onViewDetails === "function") {
       onViewDetails(product);
     } else if (productId) {
-      navigate(`/product/${productId}`);
+      navigate(getProductLink(product || { _id: productId }));
     }
   };
 
@@ -352,7 +353,7 @@ const LandingSectionProductCard = ({
 
         {/* Product Image Link */}
         <Link
-          to={`/product/${productId}`}
+          to={getProductLink(product || { _id: productId })}
           onClick={(e) => {
             e.stopPropagation();
             if (typeof onViewDetails === "function") {
@@ -402,7 +403,7 @@ const LandingSectionProductCard = ({
 
           {/* Product Title */}
           <Link
-            to={`/product/${productId}`}
+            to={getProductLink(product || { _id: productId })}
             onClick={(e) => {
               e.stopPropagation();
               if (typeof onViewDetails === "function") {

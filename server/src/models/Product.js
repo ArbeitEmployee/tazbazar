@@ -155,6 +155,12 @@ const productSchema = new mongoose.Schema({
     minlength: [3, "Product title must be at least 3 characters"],
     maxlength: [200, "Product title cannot exceed 200 characters"],
   },
+  slug: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    index: true,
+  },
   description: {
     type: String,
     required: [
@@ -520,8 +526,28 @@ productSchema.pre("validate", function (next) {
   next();
 });
 
-productSchema.pre("save", function (next) {
+const { slugifyText } = require("../utils/slugUtils");
+
+productSchema.pre("save", async function (next) {
   this.updatedAt = Date.now();
+  if (!this.slug || this.isModified("title")) {
+    const baseSlug = slugifyText(this.title || this.name) || `product-${Date.now()}`;
+    let candidate = baseSlug;
+    let suffix = 1;
+    // ensure unique slug
+    while (true) {
+      const existing = await this.constructor.findOne({
+        slug: candidate,
+        _id: { $ne: this._id },
+      }).select("_id").lean();
+      if (!existing) {
+        this.slug = candidate;
+        break;
+      }
+      suffix += 1;
+      candidate = `${baseSlug}-${suffix}`;
+    }
+  }
   next();
 });
 

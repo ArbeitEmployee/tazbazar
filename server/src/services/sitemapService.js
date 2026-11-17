@@ -135,7 +135,7 @@ const buildDynamicUrlEntries = async (storefrontBaseUrl, timestamp) => {
     }));
 
   const productEntries = products.map((product) => ({
-    loc: `${storefrontBaseUrl}/product/${product._id}`,
+    loc: `${storefrontBaseUrl}/product/${product.slug || product._id}`,
     lastmod: new Date(product.updatedAt || timestamp).toISOString(),
   }));
 

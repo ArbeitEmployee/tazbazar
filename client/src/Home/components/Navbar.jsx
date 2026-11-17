@@ -362,7 +362,7 @@ const Navbar = () => {
   const handleSuggestionClick = (item) => {
     navigate(
       item.resultType === "product"
-        ? `/product/${item._id}`
+        ? `/product/${encodeURIComponent(item.slug || item._id)}`
         : item.resultType === "order"
           ? `/track-order/${encodeURIComponent(item.orderNumber)}`
           : `/shop?category=${item._id}`,

@@ -48,6 +48,7 @@ import {
   toggleCompareItem,
 } from "../../store/compareSlice";
 import { createProductSnapshot } from "../../utils/productSnapshot";
+import { getProductLink } from "../../utils/productUrl";
 import SearchableSelect from "../../components/SearchableSelect";
 import StorefrontProductCard from "../components/StorefrontProductCard";
 import LandingSectionProductCard from "../components/LandingSectionProductCard";
@@ -600,7 +601,7 @@ const ProductGrid = () => {
 
       if (["variable", "grouped"].includes(marketplaceType)) {
         persistCurrentShopScroll();
-        navigate(`/product/${product?._id || product?.id}`);
+        navigate(getProductLink(product));
         return;
       }
 
@@ -2065,7 +2066,7 @@ const ProductGrid = () => {
                       product={product}
                       onViewDetails={() => {
                         persistCurrentShopScroll();
-                        navigate(`/product/${product._id}`);
+                        navigate(getProductLink(product));
                       }}
                     />
                   ))}
@@ -2115,7 +2116,7 @@ const ProductGrid = () => {
                     >
                       {/* Product Image */}
                       <Link
-                        to={`/product/${product._id}`}
+                        to={getProductLink(product)}
                         onClick={persistCurrentShopScroll}
                         className="relative h-48 sm:h-40 w-full sm:w-44 rounded-xl overflow-hidden bg-slate-100 shrink-0 select-none block"
                       >
@@ -2153,7 +2154,7 @@ const ProductGrid = () => {
                           </div>
 
                           <Link
-                            to={`/product/${product._id}`}
+                            to={getProductLink(product)}
                             onClick={persistCurrentShopScroll}
                             className="block"
                           >

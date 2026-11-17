@@ -10,14 +10,13 @@ const { searchProducts, createProduct, getProducts, getActiveProducts, getProduc
 const trackProductView = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ success: false, message: "Invalid product id" });
-    }
+    const isObjectId = mongoose.Types.ObjectId.isValid(id);
+    const query = isObjectId ? { _id: id } : { slug: id.toLowerCase().trim() };
 
-    const product = await Product.findByIdAndUpdate(
-      id,
+    const product = await Product.findOneAndUpdate(
+      query,
       { $inc: { viewCount: 1 } },
-      { new: true, select: "_id title viewCount" },
+      { new: true, select: "_id slug title viewCount" },
     ).lean();
 
     if (!product) {

@@ -630,7 +630,9 @@ const ProductDetails = () => {
 
     const fetchProduct = async () => {
       try {
-        const response = await axios.get(`${baseUrl}/products/public/${id}`);
+        const response = await axios.get(
+          `${baseUrl}/products/public/${encodeURIComponent(id)}`
+        );
 
         if (!isCurrent) return;
 

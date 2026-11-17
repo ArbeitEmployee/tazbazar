@@ -84,7 +84,7 @@ const invalidatePublicProductCache = () => {
   clearResponseCacheByPrefix("/api/products/public");
 };
 const HOME_CATALOG_PRODUCT_SELECT =
-  "title price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand description colors features dimensions vendor productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount createdAt";
+  "title slug price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand description colors features dimensions vendor productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount createdAt";
 const HOME_CATALOG_TYPES = [
   "Popular",
   "Hot deals",
@@ -1236,7 +1236,7 @@ const getActiveProducts = async (req, res) => {
       .populate("category", "name")
       .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
       .select(
-        "title price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand description colors dimensions vendor productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
+        "title slug price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand description colors dimensions vendor productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -1337,7 +1337,7 @@ const getProductsByType = async (req, res) => {
       .populate("category", "name type")
       .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
       .select(
-        "title price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand description colors features dimensions vendor productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
+        "title slug price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand description colors features dimensions vendor productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount",
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -1398,10 +1398,9 @@ const getHomeCatalog = async (_req, res) => {
 
 const getProduct = async (req, res) => {
   try {
-    // Check if the ID looks like a MongoDB ObjectId
     const { id } = req.params;
 
-    // If the ID is a route keyword, return 404
+    // If the identifier is a route keyword, return 404
     const routeKeywords = ["suggestions", "search", "public"];
     if (routeKeywords.includes(id)) {
       return res.status(404).json({
@@ -1410,27 +1409,40 @@ const getProduct = async (req, res) => {
       });
     }
 
-    // Check if it's a valid MongoDB ObjectId
-    if (!id.match(/^[0-9a-fA-F]{24}$/)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid product ID format",
-      });
-    }
+    // Determine query: by MongoDB ObjectId or by slug
+    const isObjectId = Boolean(id && id.match(/^[0-9a-fA-F]{24}$/));
+    const query = isObjectId ? { _id: id } : { slug: id.toLowerCase().trim() };
 
-    const product = await Product.findById(id)
+    let product = await Product.findOne(query)
       .populate("category", "name")
       .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
       .populate({
         path: "groupedProducts",
         select:
-          "title price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand marketplaceType stock isActive publicationStatus approvalStatus vendor variantDefinitions",
+          "title slug price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand marketplaceType stock isActive publicationStatus approvalStatus vendor variantDefinitions",
         populate: [
           { path: "category", select: "name" },
           { path: "vendor", select: PUBLIC_VENDOR_POPULATE_FIELDS },
         ],
       })
       .lean();
+
+    // Fallback: if not found by ObjectId, try finding by slug
+    if (!product && isObjectId) {
+      product = await Product.findOne({ slug: id.toLowerCase().trim() })
+        .populate("category", "name")
+        .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
+        .populate({
+          path: "groupedProducts",
+          select:
+            "title slug price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand marketplaceType stock isActive publicationStatus approvalStatus vendor variantDefinitions",
+          populate: [
+            { path: "category", select: "name" },
+            { path: "vendor", select: PUBLIC_VENDOR_POPULATE_FIELDS },
+          ],
+        })
+        .lean();
+    }
 
     if (!product) {
       return res.status(404).json({
@@ -2228,7 +2240,7 @@ const getSearchSuggestions = async (req, res) => {
           .populate("vendor", PUBLIC_VENDOR_POPULATE_FIELDS)
           .limit(parseInt(limit))
           .select(
-            "title images videos video youtubeVideoUrls youtubeVideoUrl price salePrice priceType showStockToPublic category brand productType marketplaceType vendor _id",
+            "title slug images videos video youtubeVideoUrls youtubeVideoUrl price salePrice priceType showStockToPublic category brand productType marketplaceType vendor _id",
           )
           .sort({ createdAt: -1 })
           .lean();
@@ -2305,7 +2317,7 @@ const getSearchSuggestions = async (req, res) => {
 
 
 const RELATED_PRODUCTS_SELECT =
-  "title price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount";
+  "title slug price salePrice priceType showStockToPublic images videos video youtubeVideoUrls youtubeVideoUrl category brand productType marketplaceType stock allowBackorder variations variantDefinitions deliveryMinDays deliveryMaxDays ratingAverage ratingCount";
 const RELATED_PRODUCTS_SCAN_LIMIT = 60;
 
 // GET /api/products/public/:id/related?limit=8
