@@ -90,8 +90,13 @@ const clearResponseCacheByPrefix = (prefix = "") => {
     return;
   }
 
+  // Also remove without "/api" or trailing slashes to handle different route mounting paths
+  const altPrefix = normalizedPrefix.startsWith("/api")
+    ? normalizedPrefix.replace(/^\/api/, "")
+    : `/api${normalizedPrefix}`;
+
   for (const key of cacheStore.keys()) {
-    if (key.startsWith(normalizedPrefix)) {
+    if (key.startsWith(normalizedPrefix) || key.startsWith(altPrefix)) {
       cacheStore.delete(key);
     }
   }

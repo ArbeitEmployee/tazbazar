@@ -1286,6 +1286,10 @@ const applyInventoryAdjustmentForItem = async ({ item, direction = -1 }) => {
   const variationId = String(item?.variationId || "").trim();
 
   if (!mongoose.Types.ObjectId.isValid(productId)) {
+    if (direction > 0) {
+      // When restoring stock (e.g. order cancelled or deleted), gracefully ignore missing product ID
+      return { applied: false, productId, variationId: "", quantity };
+    }
     throw new Error("Invalid product for inventory adjustment");
   }
 
@@ -1293,6 +1297,10 @@ const applyInventoryAdjustmentForItem = async ({ item, direction = -1 }) => {
     .select("_id title allowBackorder")
     .lean();
   if (!product) {
+    if (direction > 0) {
+      // Product was previously deleted from database, skip stock restoration gracefully
+      return { applied: false, productId, variationId: "", quantity };
+    }
     throw new Error("Product not found while updating inventory");
   }
 
@@ -3187,6 +3195,13 @@ const getAllOrders = async (req, res) => {
       paymentDetails: order.paymentDetails,
       courier: getOrderCourierMeta(order),
       adminNotes: order.adminNotes || "",
+      deliverySchedule: order.deliverySchedule || {
+        isScheduled: false,
+        scheduledDate: null,
+        note: "",
+        reminderSent: false,
+        reminderSentAt: null,
+      },
       statusTimeline: getOrderStatusTimeline(order),
       returnRequest: getOrderReturnMeta(order),
       cancellation: getOrderCancellationMeta(order, cancellationSettings),

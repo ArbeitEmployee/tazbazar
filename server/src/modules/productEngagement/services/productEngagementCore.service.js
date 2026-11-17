@@ -11,6 +11,17 @@ const {
 const isObjectId = (value) => /^[0-9a-fA-F]{24}$/.test(String(value || "").trim());
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
 
+
+const findProductByIdOrSlug = async (identifier, selectFields = "") => {
+  const cleanId = String(identifier || "").trim();
+  if (!cleanId) return null;
+  if (isObjectId(cleanId)) {
+    const product = await Product.findById(cleanId).select(selectFields).lean();
+    if (product) return product;
+  }
+  return await Product.findOne({ slug: cleanId.toLowerCase() }).select(selectFields).lean();
+};
+
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -123,17 +134,20 @@ const recalculateProductRating = async (productId) => {
 
 const getProductReviews = async (req, res) => {
   try {
-    const productId = String(req.params.id || "").trim();
-    if (!isObjectId(productId)) {
-      return res.status(400).json({
+    const rawProductId = String(req.params.id || "").trim();
+    const product = await findProductByIdOrSlug(
+      rawProductId,
+      "title isActive approvalStatus ratingAverage ratingCount"
+    );
+
+    if (!product || !isApprovedProduct(product)) {
+      return res.status(404).json({
         success: false,
-        message: "Invalid product ID format",
+        message: "Product not found",
       });
     }
 
-    const product = await Product.findById(productId)
-      .select("title isActive approvalStatus ratingAverage ratingCount")
-      .lean();
+    const productId = String(product._id);
 
     if (!product || !isApprovedProduct(product)) {
       return res.status(404).json({
@@ -187,14 +201,15 @@ const getProductReviews = async (req, res) => {
 
 const getMyProductReview = async (req, res) => {
   try {
-    const productId = String(req.params.id || "").trim();
-    if (!isObjectId(productId)) {
-      return res.status(400).json({
+    const rawProductId = String(req.params.id || "").trim();
+    const product = await findProductByIdOrSlug(rawProductId, "_id");
+    if (!product) {
+      return res.status(404).json({
         success: false,
-        message: "Invalid product ID format",
+        message: "Product not found",
       });
     }
-
+    const productId = String(product._id);
     const userId = req.user.id || req.user._id;
     const review = await ProductReview.findOne({
       product: productId,
@@ -218,14 +233,7 @@ const getMyProductReview = async (req, res) => {
 
 const createOrUpdateProductReview = async (req, res) => {
   try {
-    const productId = String(req.params.id || "").trim();
-    if (!isObjectId(productId)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid product ID format",
-      });
-    }
-
+    const rawProductId = String(req.params.id || "").trim();
     const userId = req.user?.id || req.user?._id || null;
     const rating = Math.max(1, Math.min(5, parseInt(req.body?.rating, 10) || 0));
     const title = String(req.body?.title || "").trim();
@@ -267,9 +275,19 @@ const createOrUpdateProductReview = async (req, res) => {
       });
     }
 
-    const product = await Product.findById(productId)
-      .select("title vendor isActive approvalStatus")
-      .lean();
+    const product = await findProductByIdOrSlug(
+      rawProductId,
+      "title vendor isActive approvalStatus"
+    );
+
+    if (!product || !isApprovedProduct(product)) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
+    }
+
+    const productId = String(product._id);
 
     if (!product || !isApprovedProduct(product)) {
       return res.status(404).json({
@@ -537,14 +555,15 @@ const updateProductReviewStatus = async (req, res) => {
 
 const deleteMyProductReview = async (req, res) => {
   try {
-    const productId = String(req.params.id || "").trim();
-    if (!isObjectId(productId)) {
-      return res.status(400).json({
+    const rawProductId = String(req.params.id || "").trim();
+    const product = await findProductByIdOrSlug(rawProductId, "_id");
+    if (!product) {
+      return res.status(404).json({
         success: false,
-        message: "Invalid product ID format",
+        message: "Product not found",
       });
     }
-
+    const productId = String(product._id);
     const userId = req.user.id || req.user._id;
 
     const deleted = await ProductReview.findOneAndDelete({

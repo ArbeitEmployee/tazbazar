@@ -33,7 +33,9 @@ const upsertMetaTag = (selector, attributes, value) => {
   const existing = document.head.querySelector(selector);
 
   if (!normalizedValue) {
-    existing?.remove();
+    // Do NOT remove head tags here. React 19 hoists <meta>/<link> nodes and
+    // deletes them itself on route change; removing them manually left
+    // parentNode === null and crashed React's commit phase.
     return;
   }
 
@@ -60,12 +62,13 @@ const upsertCanonicalLink = (value) => {
   );
 
   if (!normalizedValue) {
-    existing?.remove();
+    // Same rule as meta tags: never detach a head node React may own.
     return;
   }
 
   const tag = existing || document.createElement("link");
   tag.setAttribute("rel", "canonical");
+  tag.setAttribute("data-seo-managed", "true");
   tag.setAttribute("href", normalizedValue);
   tag.setAttribute("data-seo-canonical", "true");
 

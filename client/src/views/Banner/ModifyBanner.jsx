@@ -224,12 +224,15 @@ function ModifyBanner() {
 
   const confirmDeleteBanner = async () => {
     if (!deleteConfirm) return;
+    const deletedId = deleteConfirm._id;
     setIsDeleting(true);
     const toastId = toast.loading("Deleting banner...");
     try {
-      await axios.delete(`${baseUrl}/banners/${deleteConfirm._id}`, {
+      await axios.delete(`${baseUrl}/banners/${deletedId}`, {
         headers: getAuthHeaders(),
       });
+      // Instant optimistic UI update
+      setBanners((prev) => prev.filter((b) => String(b?._id || "") !== String(deletedId)));
       toast.success("Banner deleted successfully", { id: toastId });
       fetchBanners();
     } catch (err) {

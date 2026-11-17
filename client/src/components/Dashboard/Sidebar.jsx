@@ -1,14 +1,14 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSelector } from "react-redux";
 import { 
   FiHome, FiShoppingCart, FiPackage, FiUsers, FiDollarSign, 
   FiBarChart2, FiSettings, FiChevronDown, FiChevronRight,
-  FiMenu, FiX, FiLogOut, FiClipboard, FiBell
+  FiMenu, FiX, FiLogOut, FiClipboard, FiBell, FiHeart, FiMapPin, FiTruck, FiLock, FiUser
 } from "react-icons/fi";
 import { useAuth } from "../../hooks/useAuth";
 
-const MENU_ITEMS = [
+const ADMIN_MENU_ITEMS = [
   {
     title: "Dashboard",
     icon: FiHome,
@@ -153,6 +153,28 @@ const MENU_ITEMS = [
   }
 ];
 
+const CUSTOMER_MENU_ITEMS = [
+  {
+    title: "My Account",
+    icon: FiUser,
+    items: [
+      { name: "Overview", tab: "dashboard" },
+      { name: "Profile & Password", tab: "settings" },
+      { name: "Notifications", tab: "notifications" }
+    ]
+  },
+  {
+    title: "My Shopping",
+    icon: FiClipboard,
+    items: [
+      { name: "My Orders & History", tab: "my-orders" },
+      { name: "Track Order / Returns", tab: "my-order-tracking" },
+      { name: "Wishlist", tab: "wishlist" },
+      { name: "Saved Addresses", tab: "my-addresses" }
+    ]
+  }
+];
+
 const SidebarContent = ({
   activeTab,
   handleTabChange,
@@ -164,6 +186,8 @@ const SidebarContent = ({
   openGroups,
   toggleGroup,
   user,
+  menuItems = ADMIN_MENU_ITEMS,
+  isAdmin = true,
 }) => {
   const navScrollRef = useRef(null);
   const lastNavScrollRef = useRef(0);
@@ -200,7 +224,9 @@ const SidebarContent = ({
             A
           </div>
           {(sidebarOpen || isMobile) && (
-            <span className="font-semibold text-lg whitespace-nowrap">Admin UI</span>
+            <span className="font-semibold text-lg whitespace-nowrap">
+              {isAdmin ? "Admin UI" : "User Portal"}
+            </span>
           )}
         </div>
         <div className="flex items-center gap-1">
@@ -250,7 +276,7 @@ const SidebarContent = ({
         className="flex-1 overflow-y-auto py-3 px-3 space-y-1 overscroll-contain touch-pan-y app-scrollbar"
         style={{ WebkitOverflowScrolling: "touch" }}
       >
-        {MENU_ITEMS.map((group) => {
+        {menuItems.map((group) => {
           const isGroupActive = group.items?.some((item) => item.tab === activeTab);
           const isExpanded = Boolean(openGroups[group.title]);
 
@@ -335,8 +361,8 @@ const SidebarContent = ({
             </div>
             {(sidebarOpen || isMobile) && (
               <div className="flex flex-col truncate">
-                <span className="text-sm font-medium truncate">{user?.name || "Admin User"}</span>
-                <span className="text-xs text-slate-500 truncate">{user?.email || "admin@syndron.com"}</span>
+                <span className="text-sm font-medium truncate">{user?.name || (isAdmin ? "Admin User" : "Customer")}</span>
+                <span className="text-xs text-slate-500 truncate">{user?.email || ""}</span>
               </div>
             )}
           </div>
@@ -367,11 +393,21 @@ const Sidebar = ({
   handleLogout
 }) => {
   const { user } = useAuth();
-  const [openGroups, setOpenGroups] = useState({ Dashboard: true, "POS / Sale": true, Orders: true });
+  const isAdmin = user?.userType === "admin";
+  const menuItems = useMemo(() => {
+    return isAdmin ? ADMIN_MENU_ITEMS : CUSTOMER_MENU_ITEMS;
+  }, [isAdmin]);
+
+  const [openGroups, setOpenGroups] = useState(() => {
+    if (isAdmin) {
+      return { Dashboard: true, "POS / Sale": true, Orders: true };
+    }
+    return { "My Account": true, "My Shopping": true };
+  });
 
   useEffect(() => {
     if (!activeTab) return;
-    const currentGroup = MENU_ITEMS.find((group) =>
+    const currentGroup = menuItems.find((group) =>
       group.items?.some((item) => item.tab === activeTab)
     );
     if (currentGroup) {
@@ -380,7 +416,7 @@ const Sidebar = ({
         [currentGroup.title]: true,
       }));
     }
-  }, [activeTab]);
+  }, [activeTab, menuItems]);
 
   const toggleGroup = (title) => {
     setOpenGroups(prev => ({ ...prev, [title]: !prev[title] }));
@@ -397,6 +433,8 @@ const Sidebar = ({
     openGroups,
     toggleGroup,
     user,
+    menuItems,
+    isAdmin,
   };
 
   if (isMobile) {

@@ -66,6 +66,12 @@ const Footer = () => {
   const { settings } = usePublicSettings();
   const [categories, setCategories] = useState([]);
 
+  // Keep SSR and the first client render identical; apply settings after mount.
+  const [settingsReady, setSettingsReady] = useState(false);
+  useEffect(() => {
+    setSettingsReady(true);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     fetchPublicCategories()
@@ -93,6 +99,11 @@ const Footer = () => {
   const hasBrandLogoImage = Boolean(brandLogo);
   const brandLogoText =
     String(website?.logoText || "").trim() || brandName;
+
+  // Matches getDefaultPublicSettings() on the server.
+  const hydratedBrandName = settingsReady ? brandName : "E-Commerce";
+  const hydratedBrandLogo = settingsReady ? brandLogo : "";
+  const hydratedLogoText = settingsReady ? brandLogoText : "E-Commerce";
 
   const contactPhone = String(contact?.phone1 || "+880 1234 5678 90").trim();
   const contactPhone2 = String(contact?.phone2 || "").trim();
@@ -222,18 +233,18 @@ const Footer = () => {
               href="/"
               className="inline-flex cursor-pointer items-center self-start text-left transition-transform duration-200 hover:scale-[1.02]"
             >
-              {hasBrandLogoImage ? (
+              {hydratedBrandLogo ? (
                 <div className="inline-flex items-center rounded-2xl bg-white px-4 py-2 shadow-md shadow-black/20">
                   <img
-                    src={brandLogo}
-                    alt={brandName}
+                    src={hydratedBrandLogo}
+                    alt={hydratedBrandName}
                     className="h-10 sm:h-12 md:h-14 w-auto max-w-[240px] object-contain"
                   />
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5">
                   <span className="text-2xl sm:text-3xl font-black tracking-tight text-white drop-shadow-sm">
-                    {brandLogoText}
+                    {hydratedLogoText}
                   </span>
                   <span className="text-xs font-semibold text-slate-400 relative -top-3">
                     &reg;

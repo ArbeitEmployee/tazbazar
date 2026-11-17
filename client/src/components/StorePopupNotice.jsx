@@ -4,8 +4,10 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiX, FiCheck, FiArrowRight } from "react-icons/fi";
+import { useNavigate } from "@/lib/routing";
 
 const StorePopupNotice = () => {
+  const navigate = useNavigate();
   const [popup, setPopup] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
 
@@ -26,11 +28,13 @@ const StorePopupNotice = () => {
         if (res.data?.success && res.data?.data) {
           const data = res.data.data;
           if (data.isActive && (data.title || data.message)) {
-            // Check session only if showOncePerSession is true
-            if (data.showOncePerSession) {
-              const dismissedKey = `store_popup_dismissed_${data._id || "v1"}`;
-              const alreadySeen = sessionStorage.getItem(dismissedKey);
-              if (alreadySeen) return;
+            // A dismissed popup must never come back during the same session,
+            // even if the admin left showOncePerSession turned off.
+            const dismissedKey = `store_popup_dismissed_${data._id || "v1"}`;
+            try {
+              if (sessionStorage.getItem(dismissedKey)) return;
+            } catch (err) {
+              /* storage may be unavailable */
             }
 
             setPopup(data);
@@ -64,9 +68,25 @@ const StorePopupNotice = () => {
   const handleActionClick = () => {
     handleClose();
     if (popup?.buttonLink) {
-      window.location.href = popup.buttonLink;
+      // Client-side navigation: no full reload, no slow re-hydration.
+      navigate(popup.buttonLink);
     }
   };
+
+  // Escape key and scroll lock while the dialog is open.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") handleClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
 
   if (!popup || !isOpen) return null;
 
@@ -76,8 +96,12 @@ const StorePopupNotice = () => {
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[999999] flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-[4px] animate-in fade-in duration-300">
+      <div
+        className="fixed inset-0 z-[125000] flex items-center justify-center p-3 sm:p-5 bg-black/75 backdrop-blur-[4px] animate-in fade-in duration-300"
+        onClick={handleClose}
+      >
         <motion.div
+          onClick={(event) => event.stopPropagation()}
           initial={{ opacity: 0, scale: 0.92, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.92, y: 15 }}

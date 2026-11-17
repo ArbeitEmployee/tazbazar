@@ -5,6 +5,7 @@ import {
   FiChevronDown,
   FiEye,
   FiEyeOff,
+  FiFilter,
   FiLock,
   FiRefreshCw,
   FiSave,
@@ -166,6 +167,7 @@ const ModuleAdminUsers = ({ initialMode = "manage-admin" }) => {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
   const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
 
   // Create admin form state
   const [adminForm, setAdminForm] = useState(DEFAULT_ADMIN_FORM);
@@ -217,9 +219,14 @@ const ModuleAdminUsers = ({ initialMode = "manage-admin" }) => {
   const filteredUsers = useMemo(() => {
     const term = String(search || "").trim().toLowerCase();
     let baseList = users;
-    // In admin-role or admin-permission tabs, prioritize admins and staff
-    if (activeTab === "admin-role" || activeTab === "admin-permission") {
+    // In admin-role or admin-permission tabs, prioritize admins and staff by default if roleFilter is "all"
+    if ((activeTab === "admin-role" || activeTab === "admin-permission") && roleFilter === "all") {
       baseList = users.filter((u) => u.userType === "admin" || u.userType === "staff");
+    }
+    if (roleFilter !== "all") {
+      baseList = baseList.filter(
+        (u) => String(u?.userType || "").toLowerCase() === roleFilter.toLowerCase(),
+      );
     }
     if (!term) return baseList;
     return baseList.filter((row) =>
@@ -227,7 +234,7 @@ const ModuleAdminUsers = ({ initialMode = "manage-admin" }) => {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term)),
     );
-  }, [users, search, activeTab]);
+  }, [users, search, activeTab, roleFilter]);
 
   const summary = useMemo(
     () => ({
@@ -606,12 +613,25 @@ const ModuleAdminUsers = ({ initialMode = "manage-admin" }) => {
                 Manage accounts, update status and contact information.
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+              <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-300 rounded-xl px-2.5 h-10 w-full sm:w-auto">
+                <FiFilter className="text-gray-500 w-4 h-4 shrink-0" />
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="bg-transparent text-xs sm:text-sm font-medium text-gray-700 outline-none cursor-pointer pr-2"
+                >
+                  <option value="all">All Roles</option>
+                  <option value="admin">Admin</option>
+                  <option value="staff">Staff / Moderator</option>
+                  <option value="user">Regular User</option>
+                </select>
+              </div>
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search admin name, email, phone..."
-                className="h-10 w-full px-3.5 text-xs sm:text-sm border border-gray-300 rounded-xl sm:min-w-[260px] outline-none focus:border-indigo-500"
+                className="h-10 flex-1 sm:w-64 px-3.5 text-xs sm:text-sm border border-gray-300 rounded-xl outline-none focus:border-indigo-500"
               />
             </div>
           </div>
@@ -702,14 +722,37 @@ const ModuleAdminUsers = ({ initialMode = "manage-admin" }) => {
       {/* VIEW 3: ADMIN ROLE MANAGEMENT */}
       {activeTab === "admin-role" && (
         <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-xs overflow-hidden">
-          <div className="border-b border-gray-100 pb-4 mb-5">
-            <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
-              <FiUserCheck className="text-indigo-600" />
-              Role Configuration & Assignment
-            </h2>
-            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-              Change user roles between Super Admin, Admin, Staff / Moderator and Regular Users.
-            </p>
+          <div className="flex flex-col gap-3 border-b border-gray-100 pb-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+                <FiUserCheck className="text-indigo-600" />
+                Role Configuration & Assignment ({filteredUsers.length})
+              </h2>
+              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+                Change user roles between Super Admin, Admin, Staff / Moderator and Regular Users.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+              <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-300 rounded-xl px-2.5 h-10 w-full sm:w-auto">
+                <FiFilter className="text-gray-500 w-4 h-4 shrink-0" />
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="bg-transparent text-xs sm:text-sm font-medium text-gray-700 outline-none cursor-pointer pr-2"
+                >
+                  <option value="all">All Roles</option>
+                  <option value="admin">Admin</option>
+                  <option value="staff">Staff / Moderator</option>
+                  <option value="user">Regular User</option>
+                </select>
+              </div>
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search name, email, phone..."
+                className="h-10 flex-1 sm:w-64 px-3.5 text-xs sm:text-sm border border-gray-300 rounded-xl outline-none focus:border-indigo-500"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -798,14 +841,37 @@ const ModuleAdminUsers = ({ initialMode = "manage-admin" }) => {
       {/* VIEW 4: ADMIN PERMISSION MANAGEMENT */}
       {activeTab === "admin-permission" && (
         <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 shadow-xs overflow-hidden">
-          <div className="border-b border-gray-100 pb-4 mb-5">
-            <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
-              <FiLock className="text-indigo-600" />
-              Granular Permission Control
-            </h2>
-            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-              Toggle specific dashboard module permissions (Orders, Products, Reports, Website) for each account.
-            </p>
+          <div className="flex flex-col gap-3 border-b border-gray-100 pb-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+                <FiLock className="text-indigo-600" />
+                Granular Permission Control ({filteredUsers.length})
+              </h2>
+              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+                Toggle specific dashboard module permissions (Orders, Products, Reports, Website) for each account.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+              <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-300 rounded-xl px-2.5 h-10 w-full sm:w-auto">
+                <FiFilter className="text-gray-500 w-4 h-4 shrink-0" />
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="bg-transparent text-xs sm:text-sm font-medium text-gray-700 outline-none cursor-pointer pr-2"
+                >
+                  <option value="all">All Roles</option>
+                  <option value="admin">Admin</option>
+                  <option value="staff">Staff / Moderator</option>
+                  <option value="user">Regular User</option>
+                </select>
+              </div>
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search name, email, phone..."
+                className="h-10 flex-1 sm:w-64 px-3.5 text-xs sm:text-sm border border-gray-300 rounded-xl outline-none focus:border-indigo-500"
+              />
+            </div>
           </div>
 
           {loading ? (

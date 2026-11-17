@@ -139,6 +139,14 @@ const Navbar = () => {
   const userMenuRef = useRef(null);
   const timeoutRef = useRef(null);
 
+  // The first client render must be identical to the server render. Public
+  // settings (logo URL / store name) are applied only after mount so React
+  // never sees <span> on the server and <img> on the client.
+  const [settingsReady, setSettingsReady] = useState(false);
+  useEffect(() => {
+    setSettingsReady(true);
+  }, []);
+
   const { language, toggleLanguage, isBengali } = useLanguage();
   const website = settings?.website || {};
   const storeName = String(website?.storeName || "").trim();
@@ -148,17 +156,36 @@ const Navbar = () => {
   const logoText = String(website?.logoText || "").trim();
   const brandLogoText = logoText || brandName;
 
-  const safeCartCount = Number.isFinite(cartCount)
-    ? cartCount
-    : Number.parseInt(cartCount, 10) || 0;
-  const safeWishlistCount = Number.isFinite(wishlistCount)
-    ? wishlistCount
-    : Number.parseInt(wishlistCount, 10) || 0;
-  const safeCompareCount = Number.isFinite(compareCount)
-    ? compareCount
-    : Number.parseInt(compareCount, 10) || 0;
+  // Defaults match getDefaultPublicSettings() so SSR and hydration agree.
+  const hydratedBrandName = settingsReady ? brandName : "E-Commerce";
+  const hydratedLogo = settingsReady ? logo : "";
+  const hydratedLogoText = settingsReady ? brandLogoText : "E-Commerce";
+  // Language is read from cookies/localStorage in an effect, so keep the
+  // first client render identical to the server ("en") to avoid hydration
+  // mismatches on the toggle's title/classes.
+  const hydratedIsBengali = settingsReady && isBengali;
 
-  const cartTotalAmount = typeof getCartSubtotal === "function" ? getCartSubtotal() : 0;
+  // Cart/wishlist/compare counts come from persisted client storage. Render
+  // zero on the server and first client pass, then show real counts after
+  // mount so hydration markup matches.
+  const safeCartCount = settingsReady
+    ? Number.isFinite(cartCount)
+      ? cartCount
+      : Number.parseInt(cartCount, 10) || 0
+    : 0;
+  const safeWishlistCount = settingsReady
+    ? Number.isFinite(wishlistCount)
+      ? wishlistCount
+      : Number.parseInt(wishlistCount, 10) || 0
+    : 0;
+  const safeCompareCount = settingsReady
+    ? Number.isFinite(compareCount)
+      ? compareCount
+      : Number.parseInt(compareCount, 10) || 0
+    : 0;
+
+  const cartTotalAmount =
+    settingsReady && typeof getCartSubtotal === "function" ? getCartSubtotal() : 0;
 
   const visibleCategories = useMemo(
     () =>
@@ -399,16 +426,20 @@ const Navbar = () => {
             >
               <FiMenu className="h-6 w-6" />
             </button>
-            <Link to="/" onClick={scrollToTop} className="flex items-center gap-1 shrink-0 py-1">
-              {logo ? (
+            <Link
+              to="/"
+              onClick={scrollToTop}
+              className="flex items-center gap-1 shrink-0 py-1"
+            >
+              {hydratedLogo ? (
                 <img
-                  src={logo}
-                  alt={brandName}
+                  src={hydratedLogo}
+                  alt={hydratedBrandName}
                   className="h-12 sm:h-14 md:h-16 lg:h-20 w-auto max-w-[260px] object-contain transition-transform duration-200 hover:scale-102 drop-shadow-2xs"
                 />
               ) : (
                 <span className="text-2xl md:text-3xl font-extrabold tracking-tight text-black flex items-center">
-                  {brandLogoText}
+                  {hydratedLogoText}
                   <span className="text-xs font-normal align-super text-gray-400 ml-0.5">®</span>
                 </span>
               )}
@@ -665,13 +696,13 @@ const Navbar = () => {
               type="button"
               onClick={toggleLanguage}
               className="notranslate inline-flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full border border-gray-200 hover:border-black bg-gray-50 hover:bg-white text-xs font-extrabold text-gray-800 transition cursor-pointer shadow-2xs"
-              title={isBengali ? "Switch to English" : "বাংলায় পরিবর্তন করুন"}
+              title={hydratedIsBengali ? "Switch to English" : "বাংলায় পরিবর্তন করুন"}
               aria-label="Toggle language"
             >
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${!isBengali ? "bg-black text-white" : "text-gray-500"}`}>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${!hydratedIsBengali ? "bg-black text-white" : "text-gray-500"}`}>
                 EN
               </span>
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${isBengali ? "bg-emerald-600 text-white font-bold" : "text-gray-500"}`}>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${hydratedIsBengali ? "bg-emerald-600 text-white font-bold" : "text-gray-500"}`}>
                 বাং
               </span>
             </button>
@@ -924,7 +955,7 @@ const Navbar = () => {
             >
               <div>
                 <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-                  <span className="text-xl font-black text-black">{brandLogoText}</span>
+                  <span className="text-xl font-black text-black">{hydratedLogoText}</span>
                   <button type="button" onClick={() => setMobileMenuOpen(false)} className="p-1 text-gray-500 hover:text-black">
                     <FiX className="h-5 w-5" />
                   </button>

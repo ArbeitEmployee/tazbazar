@@ -1,4 +1,4 @@
-﻿/* eslint-disable no-unused-vars */
+/* eslint-disable no-unused-vars */
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import axios from "axios";
@@ -84,8 +84,10 @@ const DashboardHome = ({ user, onTabChange }) => {
 
   const quickActions = [
     { label: "My Orders", tab: "my-orders", icon: ShoppingBagIcon },
+    { label: "Track Order / Returns", tab: "my-order-tracking", icon: ClockIcon },
     { label: "Saved Addresses", tab: "my-addresses", icon: MapPinIcon },
     { label: "Wishlist", tab: "wishlist", icon: HeartIcon },
+    { label: "Profile & Password", tab: "settings", icon: ShieldCheckIcon },
   ];
 
   useEffect(() => {

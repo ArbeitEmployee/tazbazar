@@ -13,6 +13,7 @@ import {
   hasPreferences,
 } from "../../utils/userPreferences";
 import { getProductPricingDisplay } from "../../utils/productPricing";
+import { dedupeRequest } from "../../utils/requestDedupe";
 import { useThemeColors } from "../../hooks/useThemeColors";
 import LandingSectionProductCard from "./LandingSectionProductCard";
 
@@ -27,21 +28,32 @@ const shuffle = (arr) => {
   return a;
 };
 
-const fetchPersonalizedProducts = async (categoryIds = [], excludeIds = [], isManualRefresh = false) => {
+const fetchPersonalizedProducts = async (
+  categoryIds = [],
+  excludeIds = [],
+  isManualRefresh = false,
+) => {
   try {
     const baseParams = { limit: 12, page: 1 };
     if (isManualRefresh) baseParams._t = Date.now();
 
     if (categoryIds.length > 0) {
       // Fetch products from preferred categories
-      const promises = categoryIds.map((catId) =>
-        axios
-          .get(`${baseUrl}/products/public`, {
-            params: { ...baseParams, category: catId },
-          })
-          .then((r) => r.data?.products || [])
-          .catch(() => [])
-      );
+      const promises = categoryIds.map((catId) => {
+        const request = () =>
+          axios
+            .get(`${baseUrl}/products/public`, {
+              params: { ...baseParams, category: catId },
+            })
+            .then((r) => r.data?.products || []);
+        const deduped = isManualRefresh
+          ? request()
+          : dedupeRequest(
+              `products:public:category:${catId}:limit=12&page=1`,
+              request,
+            );
+        return deduped.catch(() => []);
+      });
       const results = await Promise.all(promises);
       const merged = results.flat();
 
@@ -59,9 +71,11 @@ const fetchPersonalizedProducts = async (categoryIds = [], excludeIds = [], isMa
     }
 
     // Fallback: popular products
-    const res = await axios.get(`${baseUrl}/products/public`, {
-      params: baseParams,
-    });
+    const request = () =>
+      axios.get(`${baseUrl}/products/public`, { params: baseParams });
+    const res = await (isManualRefresh
+      ? request()
+      : dedupeRequest("products:public:popular:limit=12&page=1", request));
     return { products: shuffle(res.data?.products || []), isPersonalized: false };
   } catch {
     return { products: [], isPersonalized: false };
@@ -80,12 +94,13 @@ const JustForYouSection = () => {
   // Listen to wishlist so we can refresh if items are added
   const wishlistItems = useSelector((state) => state.wishlist.items || []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal) => {
     setLoading(true);
     const topCats = getTopCategoryIds(3);
     const viewedIds = getViewedProductIds();
     const { products: fetched, isPersonalized: personalized } =
-      await fetchPersonalizedProducts(topCats, viewedIds);
+      await fetchPersonalizedProducts(topCats, viewedIds, false);
+    if (signal?.aborted) return;
     setProducts(fetched);
     setIsPersonalized(personalized);
     setLoading(false);
@@ -114,7 +129,10 @@ const JustForYouSection = () => {
   };
 
   useEffect(() => {
-    load();
+    // Cancel the StrictMode duplicate instead of firing the same request twice.
+    const controller = new AbortController();
+    load(controller.signal);
+    return () => controller.abort();
   }, [load]);
 
   // Re-compute when wishlist changes (new category preference signal)

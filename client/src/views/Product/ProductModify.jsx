@@ -22,6 +22,7 @@ import {
   normalizeVariantPricing,
 } from "../../utils/productVariants";
 import { stripHtml } from "../../utils/richText";
+import { invalidateHomeCatalogCache } from "../../utils/homeCatalog";
 import {
   FiEdit2,
   FiTrash2,
@@ -898,12 +899,18 @@ function ProductModify({ initialMode = "list" }) {
 
   const confirmDeleteProduct = async () => {
     if (!deleteConfirm) return;
+    const deletedId = deleteConfirm._id;
     setIsDeleting(true);
     const toastId = toast.loading("Deleting product...");
     try {
-      await axios.delete(`${baseUrl}/products/${deleteConfirm._id}`, {
+      await axios.delete(`${baseUrl}/products/${deletedId}`, {
         headers: getAuthHeaders(),
       });
+      // Instant optimistic UI update
+      setProducts((prev) => prev.filter((p) => String(p?._id || "") !== String(deletedId)));
+      // Invalidate frontend local storage cache
+      invalidateHomeCatalogCache();
+      window.dispatchEvent(new CustomEvent("productDeleted", { detail: { id: deletedId } }));
       toast.success("Product deleted successfully", { id: toastId });
       fetchProducts();
     } catch (err) {
@@ -1168,7 +1175,12 @@ function ProductModify({ initialMode = "list" }) {
       // Filter categories based on product type
       filterCategoriesByType(productData.productType || "General");
     } catch (err) {
-      toast.error("Failed to load product data");
+      console.error("Start editing error:", err);
+      toast.error(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to load product data",
+      );
     } finally {
       setLoading(false);
     }
@@ -1983,6 +1995,7 @@ function ProductModify({ initialMode = "list" }) {
         toast.success("Product created successfully!", { id: toastId });
       }
 
+      invalidateHomeCatalogCache();
       cancelForm();
       fetchProducts();
       fetchCategories();
@@ -3797,7 +3810,7 @@ function ProductModify({ initialMode = "list" }) {
 
                         {/* Product Meta */}
                         <div className="mt-3 md:mt-4 pt-3 md:pt-4 border-t border-gray-100 flex flex-col md:flex-row md:justify-between md:items-center gap-2">
-                          <div className="text-xs md:text-sm text-gray-500">
+                          <div className="text-xs md:text-sm text-gray-500" suppressHydrationWarning>
                             Created:{" "}
                             {product.createdAt
                               ? new Date(product.createdAt).toLocaleDateString()

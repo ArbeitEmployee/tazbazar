@@ -2,7 +2,6 @@
 /* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, Link } from "@/lib/routing";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   FiArrowRight,
   FiChevronDown,
@@ -11,6 +10,7 @@ import {
 } from "react-icons/fi";
 import { optimizeCloudinaryUrl } from "../../utils/cloudinary";
 import { fetchPublicCategories } from "../../utils/publicCategories";
+import { dedupeRequest } from "../../utils/requestDedupe";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -87,18 +87,23 @@ const Banner = () => {
     return () => window.removeEventListener("toggleCategoriesSidebar", handleToggle);
   }, []);
 
-  const fetchBannersAndCategories = useCallback(async () => {
+  const fetchBannersAndCategories = useCallback(async (signal) => {
     try {
       setLoading(true);
       const [allBannersRes, catData] = await Promise.allSettled([
-        fetch(`${baseUrl}/banners/public?page=home`),
+        dedupeRequest("banners:public:home", async () => {
+          const response = await fetch(`${baseUrl}/banners/public?page=home`);
+          return response.json();
+        }),
         fetchPublicCategories(),
       ]);
 
+      if (signal?.aborted) return;
+
       let allBanners = [];
       if (allBannersRes.status === "fulfilled") {
-        const data = await allBannersRes.value.json();
-        if (data.success && Array.isArray(data.banners)) allBanners = data.banners;
+        const data = allBannersRes.value;
+        if (data?.success && Array.isArray(data.banners)) allBanners = data.banners;
         else if (Array.isArray(data)) allBanners = data;
       }
 
@@ -150,14 +155,19 @@ const Banner = () => {
         setCategories(catData.value);
       }
     } catch (err) {
+      if (signal?.aborted) return;
       console.error("Error loading home banner:", err);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchBannersAndCategories();
+    // StrictMode runs effects twice in dev; abort the first request so only
+    // one banner/category request actually completes.
+    const controller = new AbortController();
+    fetchBannersAndCategories(controller.signal);
+    return () => controller.abort();
   }, [fetchBannersAndCategories]);
 
   // Autoplay for left slider
@@ -192,15 +202,10 @@ const Banner = () => {
         {/* =========================================================================
             FLOATING "ALL CATEGORIES" OVERLAY DROPDOWN (Positioned on top of Banner)
            ========================================================================= */}
-        <AnimatePresence>
-          {dropdownOpen && (
-            <motion.div
+        {dropdownOpen && (
+            <div
               ref={dropdownRef}
-              initial={{ opacity: 0, y: -8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.98 }}
-              transition={{ duration: 0.2 }}
-              className="absolute left-4 top-0 z-[100] w-[270px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden"
+              className="absolute left-4 top-0 z-[100] w-[270px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in duration-200"
               style={{ maxHeight: "490px" }}
             >
               {/* Dropdown Header */}
@@ -248,9 +253,8 @@ const Banner = () => {
                   );
                 })}
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+        )}
 
         {/* =========================================================================
             DIVIDED 2-PART BANNER SECTION (50% / 50% Two-Column Full-Width Grid)
@@ -261,18 +265,15 @@ const Banner = () => {
           <div className="relative w-full h-[240px] sm:h-[320px] md:h-[400px] lg:h-[460px] overflow-hidden rounded-2xl bg-gray-100 shadow-sm group">
             {currentLeft && (
               <>
-                <AnimatePresence mode="wait">
-                  <motion.img
-                    key={`left-${activeLeftIndex}`}
-                    src={getFullImageUrl(currentLeft.image)}
-                    alt={currentLeft.title || "Banner Left"}
-                    initial={{ opacity: 0, scale: 1.03 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    transition={{ duration: 0.6 }}
-                    className="w-full h-full object-cover object-center select-none transition-transform duration-700 group-hover:scale-103"
-                  />
-                </AnimatePresence>
+                {/* Plain <img> keeps DOM ownership with React; framer-motion's
+                    exit animation used to leave detached nodes behind and
+                    crash React on route change. */}
+                <img
+                  key={`left-${activeLeftIndex}`}
+                  src={getFullImageUrl(currentLeft.image)}
+                  alt={currentLeft.title || "Banner Left"}
+                  className="w-full h-full object-cover object-center select-none transition-transform duration-700 group-hover:scale-103"
+                />
 
                 {/* Clickable Overlay Link */}
                 <Link
@@ -315,18 +316,12 @@ const Banner = () => {
           <div className="relative w-full h-[240px] sm:h-[320px] md:h-[400px] lg:h-[460px] overflow-hidden rounded-2xl bg-gray-100 shadow-sm group">
             {currentRight && (
               <>
-                <AnimatePresence mode="wait">
-                  <motion.img
-                    key={`right-${activeRightIndex}`}
-                    src={getFullImageUrl(currentRight.image)}
-                    alt={currentRight.title || "Banner Right"}
-                    initial={{ opacity: 0, scale: 1.03 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    transition={{ duration: 0.6 }}
-                    className="w-full h-full object-cover object-center select-none transition-transform duration-700 group-hover:scale-103"
-                  />
-                </AnimatePresence>
+                <img
+                  key={`right-${activeRightIndex}`}
+                  src={getFullImageUrl(currentRight.image)}
+                  alt={currentRight.title || "Banner Right"}
+                  className="w-full h-full object-cover object-center select-none transition-transform duration-700 group-hover:scale-103"
+                />
 
                 {/* Clickable Overlay Link */}
                 <Link

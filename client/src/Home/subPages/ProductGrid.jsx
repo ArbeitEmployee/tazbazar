@@ -682,11 +682,13 @@ const ProductGrid = () => {
     }
   }, [location.search]);
 
-  // Fetch products and categories
+  // Fetch products and categories. Abort the StrictMode duplicate request.
   useEffect(() => {
-    fetchProducts();
-    fetchCategories();
-    fetchBrands();
+    const controller = new AbortController();
+    fetchProducts(controller.signal);
+    fetchCategories(controller.signal);
+    fetchBrands(controller.signal);
+    return () => controller.abort();
   }, []);
 
   // Filter products when dependencies change
@@ -830,10 +832,10 @@ const ProductGrid = () => {
     sortBy,
   ]);
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (signal) => {
     try {
       setLoading(true);
-      const response = await axios.get(`${baseUrl}/products/public`);
+      const response = await axios.get(`${baseUrl}/products/public`, { signal });
       if (response.data.success) {
         const productsData = response.data.products || [];
         setProducts(productsData);
@@ -844,15 +846,16 @@ const ProductGrid = () => {
         setPriceRange([0, maxPrice]);
       }
     } catch (error) {
+      if (error?.name === "CanceledError" || error?.code === "ERR_CANCELED") return;
       console.error("Error fetching products:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchCategories = async () => {
+  const fetchCategories = async (signal) => {
     try {
-      const response = await axios.get(`${baseUrl}/categories/public`);
+      const response = await axios.get(`${baseUrl}/categories/public`, { signal });
       if (response.data.success) {
         const categoriesData = response.data.categories || [];
         setCategories(categoriesData);
@@ -874,19 +877,21 @@ const ProductGrid = () => {
         }
       }
     } catch (error) {
+      if (error?.name === "CanceledError" || error?.code === "ERR_CANCELED") return;
       console.error("Error fetching categories:", error);
     }
   };
 
-  const fetchBrands = async () => {
+  const fetchBrands = async (signal) => {
     try {
-      const response = await axios.get(`${baseUrl}/brands/public`);
+      const response = await axios.get(`${baseUrl}/brands/public`, { signal });
       if (response.data.success) {
         setBrands(
           Array.isArray(response.data.brands) ? response.data.brands : [],
         );
       }
     } catch (error) {
+      if (error?.name === "CanceledError" || error?.code === "ERR_CANCELED") return;
       console.error("Error fetching brands:", error);
       setBrands([]);
     }

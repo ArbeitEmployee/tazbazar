@@ -2326,12 +2326,27 @@ const RELATED_PRODUCTS_SCAN_LIMIT = 60;
 const getRelatedProducts = async (req, res) => {
   try {
     const { id } = req.params;
+    const cleanId = String(id || "").trim();
 
-    if (!isObjectIdLike(id)) {
+    if (!cleanId) {
       return res.status(400).json({
         success: false,
-        message: "Invalid product ID format",
+        message: "Product identifier is required",
       });
+    }
+
+    const isObjectId = isObjectIdLike(cleanId);
+    const query = isObjectId ? { _id: cleanId } : { slug: cleanId.toLowerCase() };
+
+    let current = await Product.findOne(query)
+      .select("_id category productType")
+      .lean();
+
+    // Fallback: if queried by ObjectId but not found, try slug
+    if (!current && isObjectId) {
+      current = await Product.findOne({ slug: cleanId.toLowerCase() })
+        .select("_id category productType")
+        .lean();
     }
 
     const requestedLimit = Number.parseInt(req.query?.limit, 10);
@@ -2339,10 +2354,6 @@ const getRelatedProducts = async (req, res) => {
       Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 8, 1),
       24,
     );
-
-    const current = await Product.findById(id)
-      .select("_id category productType")
-      .lean();
 
     if (!current) {
       return res.status(404).json({

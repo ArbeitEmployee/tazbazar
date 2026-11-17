@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSelector } from "react-redux";
 import {
   selectAdminSettingsDraft,
@@ -27,7 +27,23 @@ export const useThemeColors = () => {
   const adminDraft = useSelector(selectAdminSettingsDraft);
   const { adminStatus, saveStatus, loaded } = useSelector(selectPublicSettingsState);
 
+  // Server and the first client render must use the same static colors.
+  // localStorage/CSS-variable values are applied only after mount.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return useMemo(() => {
+    if (!mounted) {
+      return {
+        themeColor: "#000000",
+        buttonTextColor: "#ffffff",
+        cartButtonColor: "#0f172a",
+        cartButtonHoverColor: "#2563eb",
+        cartButtonActiveColor: "#059669",
+      };
+    }
     const shouldUseAdminWebsite =
       adminStatus === "succeeded" ||
       saveStatus === "loading" ||
@@ -102,7 +118,7 @@ export const useThemeColors = () => {
         cssCartButtonActiveColor ||
         "#059669",
     };
-  }, [adminDraft?.website, adminStatus, loaded, saveStatus, settings?.website]);
+  }, [adminDraft?.website, adminStatus, loaded, mounted, saveStatus, settings?.website]);
 };
 
 export default useThemeColors;
