@@ -9,14 +9,10 @@ import ClientOnly from "@/components/ClientOnly";
 export default function DashboardPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
-  const [ready, setReady] = useState(() => {
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token");
-      const savedUser = localStorage.getItem("user");
-      return Boolean(token && savedUser);
-    }
-    return false;
-  });
+  // Always start with the same value on server and client. Reading
+  // localStorage in the initializer makes the client's first render differ
+  // from the server HTML and causes a React hydration mismatch.
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

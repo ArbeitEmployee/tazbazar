@@ -656,11 +656,14 @@ function ProductModify({ initialMode = "list" }) {
               basePricing.currentPrice === null ? null : Number(basePricing.currentPrice);
             const basePreviousPrice =
               basePricing.previousPrice === null ? null : Number(basePricing.previousPrice);
+            const isDirect = pricing.priceMode === "direct";
             const currentPrice = usesProductPrice
               ? baseCurrentPrice
               : baseCurrentPrice === null
                 ? null
-                : baseCurrentPrice + Number(pricing.price || 0);
+                : isDirect
+                  ? Number(pricing.price || 0)
+                  : baseCurrentPrice + Number(pricing.price || 0);
             const previousPrice = usesProductPrice
               ? basePreviousPrice
               : pricing.priceMode === "compare" &&
@@ -670,7 +673,9 @@ function ProductModify({ initialMode = "list" }) {
                 ? Number(basePreviousPrice ?? baseCurrentPrice) +
                   Number(pricing.comparePrice || 0)
                 : basePreviousPrice !== null && currentPrice !== null
-                  ? basePreviousPrice + Number(pricing.price || 0)
+                  ? isDirect
+                    ? basePreviousPrice
+                    : basePreviousPrice + Number(pricing.price || 0)
                   : null;
 
             if (currentPrice === null && !basePricing.isTba) return null;

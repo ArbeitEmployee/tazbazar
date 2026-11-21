@@ -35,7 +35,7 @@ router.get("/public/search", responseCache(15000), searchProducts);
 router.get("/public/suggestions", responseCache(15000), getSearchSuggestions);
 router.get("/public/home-catalog", responseCache(120000), getHomeCatalog);
 router.get("/public/:id/related", responseCache(60000), getRelatedProducts);
-router.get("/public/:id/reviews", getProductReviews);
+router.get("/public/:id/reviews", responseCache(30000), getProductReviews);
 router.post("/public/:id/reviews", createOrUpdateProductReview);
 router.get("/public", responseCache(30000), getActiveProducts);
 router.get("/public/type/:productType", responseCache(30000), getProductsByType);

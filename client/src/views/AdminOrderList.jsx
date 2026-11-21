@@ -466,8 +466,17 @@ const AdminOrderList = () => {
     }
   };
 
-  // Search with debounce
+  // Search with debounce. Skip the mount run because the "Initial fetch"
+  // effect below already loads the first page; running both used to fire two
+  // identical /orders/admin/all requests on every visit.
+  const previousFilters = useRef({ searchTerm, statusFilter });
   useEffect(() => {
+    const previous = previousFilters.current;
+    if (previous.searchTerm === searchTerm && previous.statusFilter === statusFilter) {
+      return undefined;
+    }
+    previousFilters.current = { searchTerm, statusFilter };
+
     const timer = setTimeout(() => {
       fetchOrders(1);
     }, 500);

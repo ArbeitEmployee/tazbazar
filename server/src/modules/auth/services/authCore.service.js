@@ -39,6 +39,9 @@ const {
   syncStorefrontRobotsFile,
 } = require("../../../services/sitemapService");
 
+// Maximum number of saved delivery addresses allowed per customer.
+const MAX_ADDRESS_BOOK_ITEMS = 20;
+
 const createTransporter = () => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     return null;

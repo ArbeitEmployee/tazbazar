@@ -7,6 +7,14 @@ const {
   pushNotificationsToOperationalUsers,
   pushNotificationsToUsers,
 } = require("../../../utils/notificationUtils");
+const {
+  clearResponseCacheByPrefix,
+} = require("../../../middlewares/responseCache");
+
+// Public product/review responses are cached. Drop them whenever a review is
+// written so shoppers see the new rating immediately.
+const invalidateProductPublicCache = () =>
+  clearResponseCacheByPrefix("/api/products/public/");
 
 const isObjectId = (value) => /^[0-9a-fA-F]{24}$/.test(String(value || "").trim());
 const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
@@ -386,6 +394,8 @@ const createOrUpdateProductReview = async (req, res) => {
       }),
     ]);
 
+    invalidateProductPublicCache();
+
     res.status(201).json({
       success: true,
       message: existingReview
@@ -538,6 +548,8 @@ const updateProductReviewStatus = async (req, res) => {
       ]);
     }
 
+    invalidateProductPublicCache();
+
     res.json({
       success: true,
       message: "Review moderation updated",
@@ -579,6 +591,8 @@ const deleteMyProductReview = async (req, res) => {
     }
 
     const summary = await recalculateProductRating(productId);
+
+    invalidateProductPublicCache();
 
     res.json({
       success: true,

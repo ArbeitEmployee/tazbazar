@@ -2919,6 +2919,22 @@ const createOrder = async (req, res) => {
     });
   } catch (error) {
     console.error("Create order error:", error);
+    if (error?.name === "ValidationError" || error?.name === "CastError") {
+      const details = {};
+      if (error.name === "ValidationError") {
+        Object.keys(error.errors || {}).forEach((key) => {
+          details[key] = error.errors[key].message;
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        message:
+          error.name === "CastError"
+            ? `Invalid ${error.path}: ${error.value}`
+            : "Invalid order details",
+        errors: details,
+      });
+    }
     res.status(500).json({
       success: false,
       message: "Server error while creating order",
@@ -5298,6 +5314,22 @@ const guestCheckout = async (req, res) => {
     });
   } catch (error) {
     console.error("Guest checkout error:", error);
+    if (error?.name === "ValidationError" || error?.name === "CastError") {
+      const details = {};
+      if (error.name === "ValidationError") {
+        Object.keys(error.errors || {}).forEach((key) => {
+          details[key] = error.errors[key].message;
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        message:
+          error.name === "CastError"
+            ? `Invalid ${error.path}: ${error.value}`
+            : "Invalid order details",
+        errors: details,
+      });
+    }
     res.status(500).json({
       success: false,
       message: "Server error while creating order",

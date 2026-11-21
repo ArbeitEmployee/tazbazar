@@ -408,6 +408,9 @@ export const getVariantPriceOverride = (
     hasCompareOverride = true;
   }
 
+  // Check if any variant uses explicit direct replacement price
+  let hasDirectOverride = false;
+
   normalizeSelectedVariantsPayload(selectedVariants).forEach((variant) => {
     const pricing = normalizeVariantPricing(variant);
     const usesProductPrice = pricing.price === null;
@@ -424,7 +427,17 @@ export const getVariantPriceOverride = (
     if (effectivePrice === null) return;
 
     hasOverride = true;
-    price += effectivePrice;
+
+    if (pricing.priceMode === "direct") {
+      if (!hasDirectOverride) {
+        price = effectivePrice;
+        hasDirectOverride = true;
+      } else {
+        price += effectivePrice;
+      }
+    } else {
+      price += effectivePrice;
+    }
 
     if (effectiveComparePrice !== null && effectiveComparePrice > effectivePrice) {
       hasCompareOverride = true;
