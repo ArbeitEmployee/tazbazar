@@ -443,11 +443,7 @@ const AdminOrderList = () => {
       setLoading(true);
       const token = localStorage.getItem("token");
       const response = await axios.get(`${baseUrl}/orders/admin/all`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Cache-Control": "no-cache",
-          Pragma: "no-cache",
-        },
+        headers: { Authorization: `Bearer ${token}` },
         params: {
           page,
           limit: 20,

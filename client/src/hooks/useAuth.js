@@ -132,9 +132,6 @@ const bindAxiosInterceptors = (dispatch) => {
       const storedToken = localStorage.getItem("token");
       if (storedToken) {
         config.headers.Authorization = `Bearer ${storedToken}`;
-        // Prevent aggressive production CDN/browser caching for all authenticated API requests
-        config.headers["Cache-Control"] = "no-cache";
-        config.headers.Pragma = "no-cache";
       }
 
       const method = String(config?.method || "get").toLowerCase();

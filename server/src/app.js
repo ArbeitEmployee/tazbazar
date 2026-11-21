@@ -103,6 +103,9 @@ const baseCorsOptions = {
     "X-Requested-With",
     "Accept",
     "Origin",
+    "Cache-Control",
+    "Pragma",
+    "Expires",
   ],
 };
 
