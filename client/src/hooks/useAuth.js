@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -132,9 +132,16 @@ const bindAxiosInterceptors = (dispatch) => {
       const storedToken = localStorage.getItem("token");
       if (storedToken) {
         config.headers.Authorization = `Bearer ${storedToken}`;
+        // Prevent aggressive production CDN/browser caching for all authenticated API requests
+        config.headers["Cache-Control"] = "no-cache";
+        config.headers.Pragma = "no-cache";
       }
 
       const method = String(config?.method || "get").toLowerCase();
+      // For authenticated GET requests, add cache-busting timestamp to query params
+      if (storedToken && method === "get") {
+        config.params = { ...(config.params || {}), _t: Date.now() };
+      }
       const isMutation = MUTATION_METHODS.has(method);
       const requestId = createRequestId();
       config.meta = { ...(config.meta || {}), __requestId: requestId };

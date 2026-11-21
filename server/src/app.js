@@ -155,6 +155,21 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(singleStoreResponseSanitizer);
 
+// Admin & authenticated API anti-caching middleware
+// Guarantees all admin/authenticated requests bypass any browser, proxy, CDN, or Cloudflare caches
+app.use("/api", (req, res, next) => {
+  const isAuthRequest = Boolean(req.headers.authorization);
+  const isAdminPath = req.path.includes("/admin") || req.originalUrl.includes("/admin");
+
+  if (isAuthRequest || isAdminPath) {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.set("Surrogate-Control", "no-store");
+  }
+  next();
+});
+
 // Serve uploaded files
 app.use(
   "/uploads/products",

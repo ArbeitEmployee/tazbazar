@@ -443,12 +443,17 @@ const AdminOrderList = () => {
       setLoading(true);
       const token = localStorage.getItem("token");
       const response = await axios.get(`${baseUrl}/orders/admin/all`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
         params: {
           page,
           limit: 20,
           status: statusFilter,
           search: searchTerm,
+          _t: Date.now(),
         },
       });
 
@@ -613,6 +618,8 @@ const AdminOrderList = () => {
           orderStatus: updatedStatus,
           paymentStatus: updatedPaymentStatus,
           courier: updatedOrder.courier || order.courier || null,
+          deliverySchedule:
+            updatedOrder.deliverySchedule || order.deliverySchedule || null,
           adminNotes: updatedOrder.adminNotes || order.adminNotes || "",
           statusTimeline: Array.isArray(updatedOrder.statusTimeline)
             ? updatedOrder.statusTimeline

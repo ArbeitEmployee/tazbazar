@@ -50,6 +50,15 @@ router.patch("/:id/cancel", cancelOrder);
 router.post("/:id/return", submitReturnRequest);
 
 // Admin routes
+// Prevent any caching on admin order management endpoints (critical for production/proxies/CDNs)
+router.use("/admin", (req, res, next) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  res.set("Surrogate-Control", "no-store");
+  next();
+});
+
 router.get("/admin/all", getAllOrders); // NEW - Admin order list
 router.get("/admin/product-reports", getAdminProductReports);
 router.patch("/admin/:id/status", updateOrderStatus); // UPDATED - Admin status update
